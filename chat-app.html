@@ -583,9 +583,9 @@
     <div id="load-desc">Wähle ein Modell. Es wird einmalig heruntergeladen und dann komplett offline auf deinem Gerät ausgeführt.</div>
     <div id="compat-note">ℹ️ Verwende Chrome oder Edge für beste Performance. Safari (iPhone/iPad) wird unterstützt – erster Download kann länger dauern.</div>
     <select id="model-picker">
-      <option value="HuggingFaceTB/SmolLM2-1.7B-Instruct">SmolLM2 1.7B – Empfohlen (1.0 GB)</option>
-      <option value="HuggingFaceTB/SmolLM2-360M-Instruct">SmolLM2 360M – Klein &amp; schnell (220 MB)</option>
-      <option value="Qwen/Qwen2.5-0.5B-Instruct">Qwen2.5 0.5B – Sehr klein (310 MB)</option>
+      <option value="Xenova/Qwen2.5-0.5B-Instruct">Qwen2.5 0.5B – Empfohlen (310 MB)</option>
+      <option value="Xenova/SmolLM2-360M-Instruct">SmolLM2 360M – Sehr klein &amp; schnell (220 MB)</option>
+      <option value="Xenova/SmolLM2-1.7B-Instruct">SmolLM2 1.7B – Besser (1.0 GB)</option>
     </select>
     <!-- Download progress card (hidden until download starts) -->
     <div id="dl-card">
@@ -691,12 +691,16 @@
         if (window._moduleReady && window._realStartLoad) {
           clearInterval(timer);
           window._realStartLoad();
-        } else if (waited >= 20000) {
+        } else if (waited >= 60000) {
           clearInterval(timer);
           btn.disabled    = false;
           btn.textContent = '🔄 Erneut versuchen';
-          status.textContent = '❌ Fehler: Bitte direkt in Safari oder Chrome öffnen (nicht über htmlpreview).';
+          status.textContent = '❌ KI-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden oder WLAN prüfen.';
           $('load-icon').classList.remove('spin');
+        } else {
+          // Zeige Wartezeit
+          var secs = Math.round(waited / 1000);
+          status.textContent = 'KI-Bibliothek lädt… (' + secs + 's)';
         }
       }, 500);
     });
@@ -751,27 +755,13 @@
 </script>
 
 <script type="module">
-// CDNs in Reihenfolge versuchen
-let transformers;
-const CDNS = [
-  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1',
-  'https://esm.run/@huggingface/transformers@3.5.1',
-  'https://unpkg.com/@huggingface/transformers@3.5.1/dist/transformers.min.js'
-];
+// @xenova/transformers v2 – bewährt, Safari iOS kompatibel
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
-try {
-  transformers = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1');
-} catch (e1) {
-  try {
-    transformers = await import('https://esm.run/@huggingface/transformers');
-  } catch (e2) {
-    document.getElementById('load-status').textContent = '❌ Bibliothek konnte nicht geladen werden. Bitte Chrome/Edge verwenden.';
-    document.getElementById('load-action').disabled = false;
-    throw new Error('Transformers.js import failed: ' + e2.message);
-  }
-}
+// WASM bevorzugen (stabiler auf iOS als WebGPU)
+env.backends.onnx.wasm.proxy = false;
 
-const { pipeline, TextStreamer } = transformers;
+document.getElementById('load-status').textContent = '✅ Bereit – drücke Starten';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PROFILE_KEY = 'aichat_profile2';
@@ -893,21 +883,8 @@ async function doStartLoad() {
       }
     };
 
-    pipe = await pipeline('text-generation', modelId, {
-      dtype: 'q4',
-      device: 'webgpu',
-      progress_callback
-    }).catch(async () => {
-      setDlPhase('WebGPU nicht verfügbar – WASM-Modus');
-      document.getElementById('dl-speed').textContent = '';
-      dlLastTime = Date.now();
-      dlLastLoaded = 0;
-      return await pipeline('text-generation', modelId, {
-        dtype: 'q4',
-        device: 'wasm',
-        progress_callback
-      });
-    });
+    // v2: kein device/dtype nötig – läuft automatisch via WASM (funktioniert auf iOS)
+    pipe = await pipeline('text-generation', modelId, { progress_callback });
 
     document.getElementById('load-icon').classList.remove('spin');
     document.getElementById('load-screen').classList.add('hidden');
@@ -953,7 +930,7 @@ function startConv() {
   updateActive();
 }
 
-window.newChat = function () {
+function newChat() {
   if (!pipe) return;
   startConv();
   clearMsgs();
@@ -968,7 +945,7 @@ function syncConv() {
   if (c) { c.messages = [...curMsgs]; saveMem(); renderSidebar(); }
 }
 
-window.loadConv = function (id) {
+function loadConv(id) {
   const c = convs.find(x => x.id === id);
   if (!c) return;
   convId  = id;
@@ -983,7 +960,7 @@ window.loadConv = function (id) {
 };
 
 // ── Send ──────────────────────────────────────────────────────────────────────
-window.send = async function () {
+async function send() {
   if (!pipe || generating) return;
   const inp  = document.getElementById('msg-in');
   const text = inp.value.trim();
@@ -1006,23 +983,41 @@ window.send = async function () {
   let reply = '';
 
   try {
-    const streamer = new TextStreamer(pipe.tokenizer, {
-      skip_prompt: true,
-      skip_special_tokens: true,
-      callback_function: (tok) => {
-        reply += tok;
-        bubbleEl.textContent = reply;
-        bubbleEl.classList.add('typing');
-        scrollBot();
+    // v2 API: callback_function für Token-by-Token Update
+    let prevLen = 0;
+    const result = await pipe(history, {
+      max_new_tokens: 400,
+      temperature:    0.75,
+      do_sample:      true,
+      callback_function: (beams) => {
+        // Decode current output tokens for live preview
+        try {
+          const ids  = beams[0].output_token_ids;
+          const text = pipe.tokenizer.decode(ids, { skip_special_tokens: true });
+          // Only show newly generated part (after prompt)
+          if (text.length > prevLen) {
+            reply = text;
+            bubbleEl.textContent = reply;
+            bubbleEl.classList.add('typing');
+            scrollBot();
+          }
+        } catch { /* decode might fail mid-token */ }
       }
     });
 
-    await pipe(history, {
-      max_new_tokens: 500,
-      temperature:    0.75,
-      do_sample:      true,
-      streamer
-    });
+    // Extract final assistant reply from result
+    const generated = result[0].generated_text;
+    if (Array.isArray(generated)) {
+      // Chat format: last message is assistant reply
+      const last = generated[generated.length - 1];
+      reply = (last && last.content) ? last.content.trim() : reply;
+    } else if (typeof generated === 'string') {
+      // Find assistant turn after last user message
+      const marker = '[/INST]';
+      const idx = generated.lastIndexOf(marker);
+      reply = idx >= 0 ? generated.slice(idx + marker.length).trim() : generated.trim();
+    }
+    bubbleEl.textContent = reply || '…';
   } catch (err) {
     reply = '❌ Fehler: ' + (err.message || String(err));
     bubbleEl.textContent = reply;
@@ -1059,18 +1054,26 @@ function buildGreeting() {
 }
 
 // ── Fact extraction ───────────────────────────────────────────────────────────
+function extractReplyText(out) {
+  // v2: extract assistant content from pipeline output
+  try {
+    const gen = out[0]?.generated_text;
+    if (Array.isArray(gen)) return gen[gen.length - 1]?.content?.trim() || '';
+    if (typeof gen === 'string') return gen.trim();
+  } catch { /* */ }
+  return '';
+}
+
 async function extractFacts(msgs) {
   if (!pipe) return;
   try {
     const conv = msgs.map(m => m.role + ': ' + m.content).join('\n');
-    const prompt = [
-      { role: 'user', content: `Extrahiere wichtige Fakten über den NUTZER (nicht den Assistenten) aus diesem Gespräch. Gib NUR ein JSON-Array mit deutschen Strings zurück. Maximal 4 Fakten. Wenn keine neuen Infos: []\n\nGespräch:\n${conv}\n\nJSON:` }
-    ];
-    const out = await pipe(prompt, { max_new_tokens: 150, temperature: 0.1 });
-    const raw = Array.isArray(out) ? out[0]?.generated_text : null;
-    const lastMsg = Array.isArray(raw) ? raw[raw.length - 1]?.content : null;
-    if (!lastMsg) return;
-    const match = lastMsg.match(/\[[\s\S]*?\]/);
+    const out  = await pipe(
+      [{ role: 'user', content: `Extrahiere Fakten über den NUTZER aus diesem Gespräch als JSON-Array. Maximal 4. Wenn keine: []\n\n${conv}\n\nJSON:` }],
+      { max_new_tokens: 120, temperature: 0.1 }
+    );
+    const text  = extractReplyText(out);
+    const match = text.match(/\[[\s\S]*?\]/);
     if (!match) return;
     const arr = JSON.parse(match[0]);
     if (!Array.isArray(arr)) return;
@@ -1079,14 +1082,11 @@ async function extractFacts(msgs) {
         profile.facts.push(f.trim());
     });
     profile.facts = profile.facts.slice(-40);
-    // Try to extract name
     if (profile.name === 'Unbekannt') {
       const nf = profile.facts.find(f => /hei(ß|ss)t\s+\w+/i.test(f));
       if (nf) { const m = nf.match(/hei(ß|ss)t\s+(\w+)/i); if (m) profile.name = m[2]; }
     }
-    profile.totalConvs = convs.length;
-    saveMem();
-    renderProfile();
+    saveMem(); renderProfile();
   } catch { /* not critical */ }
 }
 
@@ -1094,12 +1094,11 @@ async function summarize() {
   if (!pipe || curMsgs.length < 2) return;
   try {
     const conv = curMsgs.slice(0, 4).map(m => m.role + ': ' + m.content).join('\n');
-    const out = await pipe(
+    const out  = await pipe(
       [{ role: 'user', content: 'Fasse in max. 7 deutschen Wörtern zusammen:\n' + conv }],
-      { max_new_tokens: 25, temperature: 0.2 }
+      { max_new_tokens: 20, temperature: 0.2 }
     );
-    const raw  = Array.isArray(out) ? out[0]?.generated_text : null;
-    const last = Array.isArray(raw) ? raw[raw.length - 1]?.content?.trim() : null;
+    const last = extractReplyText(out);
     if (last) { const c = curConv(); if (c) { c.summary = last; saveMem(); renderSidebar(); } }
   } catch { /* */ }
 }
@@ -1235,7 +1234,7 @@ function confirmClear() {
   document.getElementById('modal-wrap').classList.add('open');
 };
 
-function send() { window._send && window._send(); }
+// send is exposed via window._send below
 
 // ── Header helpers ─────────────────────────────────────────────────────────────
 function setHdrDot(cls) {

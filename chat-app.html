@@ -362,24 +362,92 @@
     cursor: pointer;
   }
 
-  #progress-wrap {
+  /* Download progress card */
+  #dl-card {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px 20px;
     width: 100%;
     max-width: 360px;
-    background: var(--s2);
+  }
+  #dl-card.show { display: flex; }
+
+  #dl-phase {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .phase-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent2);
+    animation: dp 1s infinite;
+    flex-shrink: 0;
+  }
+
+  #dl-pct {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  #progress-wrap {
+    width: 100%;
+    background: rgba(255,255,255,.08);
     border-radius: 99px;
-    height: 6px;
+    height: 10px;
     overflow: hidden;
   }
 
   #progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #7c3aed, #a855f7);
+    background: linear-gradient(90deg, #7c3aed, #a855f7, #ec4899);
+    background-size: 200% 100%;
     border-radius: 99px;
     width: 0%;
-    transition: width .3s ease;
+    transition: width .4s ease;
+    animation: barShine 2s linear infinite;
+  }
+  @keyframes barShine {
+    0%   { background-position: 200% center; }
+    100% { background-position: -200% center; }
   }
 
-  #load-status { font-size: 12px; color: var(--text2); }
+  #dl-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text2);
+  }
+
+  #dl-speed { color: var(--green); font-weight: 600; }
+
+  #dl-file {
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: .7;
+  }
+
+  #load-status {
+    font-size: 12px;
+    color: var(--text2);
+    min-height: 18px;
+  }
+
+  #load-icon.spin { animation: iconSpin 2s linear infinite; }
+  @keyframes iconSpin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
 
   #load-action {
     background: linear-gradient(135deg, #7c3aed, #6d28d9);
@@ -519,8 +587,19 @@
       <option value="HuggingFaceTB/SmolLM2-360M-Instruct">SmolLM2 360M – Klein &amp; schnell (220 MB)</option>
       <option value="Qwen/Qwen2.5-0.5B-Instruct">Qwen2.5 0.5B – Sehr klein (310 MB)</option>
     </select>
-    <div id="progress-wrap"><div id="progress-bar"></div></div>
-    <div id="load-status">Bereit</div>
+    <!-- Download progress card (hidden until download starts) -->
+    <div id="dl-card">
+      <div id="dl-phase"><span class="phase-dot"></span><span id="dl-phase-text">Starte…</span></div>
+      <div id="dl-pct">0%</div>
+      <div id="progress-wrap"><div id="progress-bar"></div></div>
+      <div id="dl-details">
+        <span id="dl-mb">0 MB / ? MB</span>
+        <span id="dl-speed"></span>
+      </div>
+      <div id="dl-file"></div>
+    </div>
+
+    <div id="load-status">Bereit zum Starten</div>
     <button id="load-action" onclick="startLoad()">🚀 Starten</button>
   </div>
 
@@ -619,28 +698,91 @@ function saveMem() {
 }
 
 // ── Model loading ─────────────────────────────────────────────────────────────
+
+// Download speed tracking
+let dlStartTime  = 0;
+let dlLastLoaded = 0;
+let dlLastTime   = 0;
+
+function showDlCard() {
+  document.getElementById('dl-card').classList.add('show');
+  document.getElementById('model-picker').style.display = 'none';
+  document.getElementById('load-action').style.display  = 'none';
+  document.getElementById('load-status').style.display  = 'none';
+  document.getElementById('load-icon').classList.add('spin');
+}
+
+function setDlPhase(text) {
+  document.getElementById('dl-phase-text').textContent = text;
+}
+
+function updateDlProgress(loaded, total, filename) {
+  const now  = Date.now();
+  const pct  = total ? Math.round((loaded / total) * 100) : 0;
+  const mbL  = (loaded / 1048576).toFixed(1);
+  const mbT  = total  ? (total  / 1048576).toFixed(0) : '?';
+
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('dl-pct').textContent       = pct + '%';
+  document.getElementById('dl-mb').textContent        = `${mbL} MB / ${mbT} MB`;
+
+  // Speed calculation (every 500ms)
+  if (now - dlLastTime > 500 && dlLastTime > 0) {
+    const bytesDelta = loaded - dlLastLoaded;
+    const timeDelta  = (now - dlLastTime) / 1000;
+    const speedMBs   = (bytesDelta / 1048576 / timeDelta).toFixed(1);
+    const remaining  = total && loaded < total
+      ? Math.round((total - loaded) / 1048576 / (bytesDelta / 1048576 / timeDelta))
+      : null;
+
+    document.getElementById('dl-speed').textContent =
+      speedMBs + ' MB/s' + (remaining ? ` · ~${remaining}s` : '');
+    dlLastLoaded = loaded;
+    dlLastTime   = now;
+  } else if (dlLastTime === 0) {
+    dlLastLoaded = loaded;
+    dlLastTime   = now;
+  }
+
+  if (filename) {
+    const short = filename.split('/').pop() || filename;
+    document.getElementById('dl-file').textContent = '📄 ' + short;
+  }
+}
+
 window.startLoad = async function () {
   const modelId = document.getElementById('model-picker').value;
   const btn     = document.getElementById('load-action');
-  const bar     = document.getElementById('progress-bar');
-  const status  = document.getElementById('load-status');
 
   btn.disabled = true;
   lsSet(MODEL_KEY, modelId);
-
   setHdrDot('pulse');
   setHdrSub('Lade Modell…');
 
+  showDlCard();
+  setDlPhase('Verbinde…');
+  dlStartTime = dlLastTime = Date.now();
+
   try {
     const progress_callback = (p) => {
-      if (p.status === 'downloading') {
-        const pct = p.total ? Math.round((p.loaded / p.total) * 100) : 0;
-        bar.style.width = pct + '%';
-        const mb = p.total ? Math.round(p.total / 1024 / 1024) : '?';
-        status.textContent = `Herunterladen… ${pct}% (${mb} MB)`;
+      if (p.status === 'initiate') {
+        setDlPhase('Starte Download…');
+      } else if (p.status === 'downloading') {
+        setDlPhase('Herunterladen');
+        updateDlProgress(p.loaded || 0, p.total || 0, p.file || p.name || '');
+      } else if (p.status === 'done') {
+        setDlPhase('Datei geladen ✓');
+        if (p.total) updateDlProgress(p.total, p.total, '');
       } else if (p.status === 'loading') {
-        status.textContent = 'Modell wird initialisiert…';
-        bar.style.width = '95%';
+        setDlPhase('Modell wird initialisiert…');
+        document.getElementById('progress-bar').style.width = '95%';
+        document.getElementById('dl-pct').textContent = '95%';
+        document.getElementById('dl-speed').textContent = '';
+        document.getElementById('dl-file').textContent  = '';
+      } else if (p.status === 'ready') {
+        setDlPhase('Fertig! ✅');
+        document.getElementById('progress-bar').style.width = '100%';
+        document.getElementById('dl-pct').textContent = '100%';
       }
     };
 
@@ -649,8 +791,10 @@ window.startLoad = async function () {
       device: 'webgpu',
       progress_callback
     }).catch(async () => {
-      // WebGPU failed → WASM fallback
-      status.textContent = 'WebGPU nicht verfügbar – nutze WASM-Fallback…';
+      setDlPhase('WebGPU nicht verfügbar – WASM-Modus');
+      document.getElementById('dl-speed').textContent = '';
+      dlLastTime = Date.now();
+      dlLastLoaded = 0;
       return await pipeline('text-generation', modelId, {
         dtype: 'q4',
         device: 'wasm',
@@ -658,9 +802,7 @@ window.startLoad = async function () {
       });
     });
 
-    bar.style.width = '100%';
-    status.textContent = '✅ Bereit!';
-
+    document.getElementById('load-icon').classList.remove('spin');
     document.getElementById('load-screen').classList.add('hidden');
     document.getElementById('send').disabled = false;
 
@@ -681,8 +823,13 @@ window.startLoad = async function () {
       if (greet) appendAI(greet);
     }
   } catch (err) {
-    status.textContent = '❌ Fehler: ' + (err.message || String(err));
-    btn.disabled = false;
+    document.getElementById('load-icon').classList.remove('spin');
+    setDlPhase('❌ Fehler');
+    document.getElementById('dl-speed').textContent = '';
+    document.getElementById('dl-file').textContent  = err.message || String(err);
+    document.getElementById('load-action').style.display  = 'block';
+    document.getElementById('load-action').disabled = false;
+    document.getElementById('load-action').textContent = '🔄 Erneut versuchen';
     setHdrDot('');
     setHdrSub('Fehler beim Laden');
     console.error(err);

@@ -600,12 +600,12 @@
     </div>
 
     <div id="load-status" id="load-status">Bereit zum Starten</div>
-    <button id="load-action" onclick="window._startLoad && window._startLoad()">🚀 Starten</button>
+    <button id="load-action">🚀 Starten</button>
   </div>
 
   <!-- Header -->
   <div id="header">
-    <button id="menu-btn" onclick="openDrawer()">☰</button>
+    <button id="menu-btn">☰</button>
     <div id="header-info">
       <div id="header-title">KI-Chat</div>
       <div id="header-sub">
@@ -613,7 +613,7 @@
         <span id="hdr-sub-text">Modell wird geladen…</span>
       </div>
     </div>
-    <button id="new-btn" onclick="newChat()">+ Neu</button>
+    <button id="new-btn">+ Neu</button>
   </div>
 
   <!-- Messages -->
@@ -624,15 +624,14 @@
   <!-- Input -->
   <div id="input-bar">
     <div id="input-row">
-      <textarea id="msg-in" rows="1" placeholder="Nachricht schreiben…"
-        onkeydown="onKey(event)" oninput="grow(this)"></textarea>
-      <button id="send" onclick="send()" disabled>➤</button>
+      <textarea id="msg-in" rows="1" placeholder="Nachricht schreiben…"></textarea>
+      <button id="send" disabled>➤</button>
     </div>
   </div>
 </div>
 
 <!-- Drawer -->
-<div id="drawer-overlay" onclick="closeDrawer()"></div>
+<div id="drawer-overlay"></div>
 <div id="drawer">
   <div id="drawer-header">
     <div id="drawer-title">🧠 Gedächtnis</div>
@@ -646,8 +645,8 @@
   <div id="conv-section-title">Verlauf</div>
   <div id="conv-list"></div>
   <div id="drawer-btns">
-    <button class="dbtn primary" onclick="newChat();closeDrawer()">✦ Neuer Chat</button>
-    <button class="dbtn ghost"   onclick="confirmClear()">🗑 Löschen</button>
+    <button class="dbtn primary" id="drawer-new-btn">✦ Neuer Chat</button>
+    <button class="dbtn ghost"   id="drawer-clear-btn">🗑 Löschen</button>
   </div>
 </div>
 
@@ -657,39 +656,98 @@
     <h2 id="modal-h"></h2>
     <p id="modal-p"></p>
     <div class="sheet-btn-row">
-      <button class="sbtn no" onclick="closeModal()">Abbrechen</button>
+      <button class="sbtn no" id="modal-cancel">Abbrechen</button>
       <button class="sbtn ok" id="modal-ok">OK</button>
     </div>
   </div>
 </div>
 
-<!-- Fallback: sofortiges Button-Feedback, bevor das Modul geladen ist -->
+<!-- UI event bindings – kein inline onclick, funktioniert überall -->
 <script>
-  // Zeige sofort Feedback wenn Button gedrückt wird
-  window._startLoad = function() {
-    const btn = document.getElementById('load-action');
-    const status = document.getElementById('load-status');
-    btn.disabled = true;
-    btn.textContent = '⏳ Wird geladen…';
-    status.textContent = 'KI-Bibliothek wird geladen…';
-    // Warte max. 15s auf Modul
-    let waited = 0;
-    const check = setInterval(() => {
-      waited += 500;
-      if (window._moduleReady) {
-        clearInterval(check);
+(function() {
+  window._moduleReady   = false;
+  window._realStartLoad = null;
+
+  function $ (id) { return document.getElementById(id); }
+
+  function bindEvents() {
+    // Starten-Button
+    $('load-action').addEventListener('click', function() {
+      var btn    = $('load-action');
+      var status = $('load-status');
+      btn.disabled    = true;
+      btn.textContent = '⏳ Wird geladen…';
+      status.textContent = 'KI-Bibliothek wird geladen…';
+      $('load-icon').classList.add('spin');
+
+      if (window._moduleReady && window._realStartLoad) {
         window._realStartLoad();
-      } else if (waited >= 15000) {
-        clearInterval(check);
-        btn.disabled = false;
-        btn.textContent = '🔄 Erneut versuchen';
-        status.textContent = '❌ Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.';
-        document.getElementById('load-icon').classList.remove('spin');
+        return;
       }
-    }, 500);
-    document.getElementById('load-icon').classList.add('spin');
-  };
-  window._moduleReady = false;
+      // Warte auf Modul (max. 20s)
+      var waited = 0;
+      var timer = setInterval(function() {
+        waited += 500;
+        if (window._moduleReady && window._realStartLoad) {
+          clearInterval(timer);
+          window._realStartLoad();
+        } else if (waited >= 20000) {
+          clearInterval(timer);
+          btn.disabled    = false;
+          btn.textContent = '🔄 Erneut versuchen';
+          status.textContent = '❌ Fehler: Bitte direkt in Safari oder Chrome öffnen (nicht über htmlpreview).';
+          $('load-icon').classList.remove('spin');
+        }
+      }, 500);
+    });
+
+    // Header-Buttons
+    $('menu-btn').addEventListener('click', function() {
+      if (window._openDrawer) window._openDrawer();
+    });
+    $('new-btn').addEventListener('click', function() {
+      if (window._newChat) window._newChat();
+    });
+
+    // Senden
+    $('send').addEventListener('click', function() {
+      if (window._send) window._send();
+    });
+    $('msg-in').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 600) {
+        e.preventDefault();
+        if (window._send) window._send();
+      }
+    });
+    $('msg-in').addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    // Drawer
+    $('drawer-overlay').addEventListener('click', function() {
+      if (window._closeDrawer) window._closeDrawer();
+    });
+    $('drawer-new-btn').addEventListener('click', function() {
+      if (window._newChat)     window._newChat();
+      if (window._closeDrawer) window._closeDrawer();
+    });
+    $('drawer-clear-btn').addEventListener('click', function() {
+      if (window._confirmClear) window._confirmClear();
+    });
+
+    // Modal
+    $('modal-cancel').addEventListener('click', function() {
+      if (window._closeModal) window._closeModal();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindEvents);
+  } else {
+    bindEvents();
+  }
+})();
 </script>
 
 <script type="module">
@@ -1126,7 +1184,7 @@ function renderSidebar() {
     const row = document.createElement('div');
     row.className = 'conv-row' + (c.id === convId ? ' active' : '');
     row.dataset.id = c.id;
-    row.onclick = () => pipe && window.loadConv(c.id);
+    row.addEventListener('click', () => pipe && loadConv(c.id));
     row.innerHTML = `<div class="conv-date">${label}</div><div class="conv-title">${esc(c.summary)}</div>`;
     list.appendChild(row);
   });
@@ -1138,31 +1196,32 @@ function updateActive() {
   );
 }
 
-window.delFact = function (idx) {
+function delFact(idx) {
   profile.facts.splice(idx, 1);
   saveMem();
   renderProfile();
-};
+}
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
-window.openDrawer = function () {
+function openDrawer() {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawer-overlay').classList.add('open');
-};
-window.closeDrawer = function () {
+}
+function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawer-overlay').classList.remove('open');
-};
+}
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
-window.closeModal = function () {
+function closeModal() {
   document.getElementById('modal-wrap').classList.remove('open');
-};
+}
 
-window.confirmClear = function () {
+function confirmClear() {
   document.getElementById('modal-h').textContent = 'Alles löschen?';
   document.getElementById('modal-p').textContent = 'Alle Gespräche, das Profil und gespeicherte Fakten werden unwiderruflich gelöscht.';
-  document.getElementById('modal-ok').onclick = () => {
+  document.getElementById('modal-ok').addEventListener('click', function handler() {
+    document.getElementById('modal-ok').removeEventListener('click', handler);
     closeModal();
     profile = { name: 'Unbekannt', facts: [], totalConvs: 0 };
     convs   = [];
@@ -1176,18 +1235,7 @@ window.confirmClear = function () {
   document.getElementById('modal-wrap').classList.add('open');
 };
 
-// ── Input ──────────────────────────────────────────────────────────────────────
-window.onKey = function (e) {
-  if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 600) {
-    e.preventDefault();
-    window.send();
-  }
-};
-
-window.grow = function (el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-};
+function send() { window._send && window._send(); }
 
 // ── Header helpers ─────────────────────────────────────────────────────────────
 function setHdrDot(cls) {
@@ -1209,6 +1257,16 @@ if (isIOS) {
   document.getElementById('compat-note').classList.add('show');
 }
 
+// ── Expose functions to non-module UI bindings ────────────────────────────────
+window._send         = send;
+window._newChat      = newChat;
+window._openDrawer   = openDrawer;
+window._closeDrawer  = closeDrawer;
+window._confirmClear = confirmClear;
+window._closeModal   = closeModal;
+window.delFact       = delFact;
+window.loadConv      = loadConv;
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 loadMem();
 renderSidebar();
@@ -1221,8 +1279,8 @@ if (savedModel) {
 }
 
 // Modul erfolgreich geladen – Button aktivieren
-window._moduleReady    = true;
-window._realStartLoad  = doStartLoad;
+window._moduleReady   = true;
+window._realStartLoad = doStartLoad;
 document.getElementById('load-status').textContent = '✅ Bereit – drücke Starten';
 document.getElementById('load-action').disabled    = false;
 document.getElementById('load-action').textContent = '🚀 Starten';

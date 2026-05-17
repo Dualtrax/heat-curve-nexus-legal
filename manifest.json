@@ -1,0 +1,20 @@
+{
+  "name": "Lokaler KI-Chat",
+  "short_name": "KI-Chat",
+  "description": "KI-Chat der lokal auf deinem Gerät läuft – kein Server, kein API-Key",
+  "start_url": "/chat-app.html",
+  "display": "standalone",
+  "background_color": "#0d0d14",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait-primary",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%237c3aed'/><text y='360' font-size='320' text-anchor='middle' x='256'>🤖</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"]
+}

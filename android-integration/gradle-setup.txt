@@ -1,0 +1,73 @@
+════════════════════════════════════════════════════════
+ ANDROID INTEGRATION – SETUP ANLEITUNG
+════════════════════════════════════════════════════════
+
+── 1. build.gradle (Module: app) ──────────────────────
+
+dependencies {
+    // MediaPipe LLM Inference
+    implementation("com.google.mediapipe:tasks-genai:0.10.22")
+
+    // Coroutines (falls noch nicht vorhanden)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Material (falls noch nicht vorhanden)
+    implementation("com.google.android.material:material:1.12.0")
+}
+
+── 2. AndroidManifest.xml ─────────────────────────────
+
+<uses-permission android:name="android.permission.INTERNET" />
+
+<!-- Innerhalb <application>: -->
+<uses-library
+    android:name="org.apache.http.legacy"
+    android:required="false" />
+
+── 3. Dateien in dein Projekt kopieren ────────────────
+
+Kopiere diese Dateien in dein src/main/java/com/yourapp/ai/ Verzeichnis:
+
+  • LlmManager.kt       – Verwaltet das MediaPipe-Modell
+  • MemoryManager.kt    – Speichert Profil & Gesprächsverlauf
+  • AiChatSheet.kt      – Chat-UI als BottomSheet
+  • BaseAiActivity.kt   – Basisklasse mit Floating-Button
+
+Passe den Package-Namen in jeder Datei an:
+  package com.yourapp.ai  →  package com.DEIN_PACKAGE.ai
+
+── 4. Activities anpassen ─────────────────────────────
+
+Ändere in jeder Activity, wo der FAB erscheinen soll:
+
+  VORHER:  class MainActivity : AppCompatActivity() {
+  NACHHER: class MainActivity : BaseAiActivity() {
+
+── 5. Fertig! ─────────────────────────────────────────
+
+Beim ersten App-Start erscheint ein Dialog zum Modell-Download.
+Nach dem Download (einmalig ~1.5 GB) läuft alles offline.
+
+Der 🤖-Button erscheint unten rechts in jeder Activity.
+Antippen → Chat öffnet sich als BottomSheet.
+
+── 6. In-App Purchase Integration ────────────────────
+
+Siehe unten für IAP-Hinweise zum KI-Assistenten.
+
+Der AI-Assistent kann z.B. als Premium-Feature angeboten werden:
+  • Kostenlose Version: 5 Nachrichten/Tag
+  • Premium (IAP): Unbegrenzt + erweitertes Gedächtnis
+
+In BaseAiActivity.kt → buildFab() → setOnClickListener:
+
+  setOnClickListener {
+      if (isPremiumUnlocked()) {
+          AiChatSheet.show(supportFragmentManager)
+      } else {
+          showUpgradeDialog()  // Google Play Billing aufrufen
+      }
+  }
+
+Billing Library:
+  implementation("com.android.billingclient:billing-ktx:7.0.0")

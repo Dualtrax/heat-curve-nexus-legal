@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tamagotchi KI</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 20px;
+    overflow-x: hidden;
+  }
+
+  /* ── Device shell ── */
+  #device {
+    width: 100%;
+    max-width: 380px;
+    background: linear-gradient(160deg, #2d2d44 0%, #1e1e30 100%);
+    border-radius: 40px;
+    padding: 20px 18px 24px;
+    position: relative;
+    box-shadow:
+      0 0 0 3px #e040fb,
+      0 0 0 5px #7c4dff,
+      0 0 0 7px #ffab40,
+      0 30px 80px rgba(0,0,0,.7);
+  }
+
+  /* ── Screen area ── */
+  #screen {
+    background: linear-gradient(160deg, #0d0d1a 0%, #111128 100%);
+    border-radius: 20px;
+    padding: 14px;
+    border: 2px solid #333355;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Pet canvas ── */
+  #pet-canvas {
+    display: block;
+    margin: 0 auto;
+    width: 200px;
+    height: 160px;
+  }
+
+  /* ── Age display ── */
+  #age-display {
+    text-align: center;
+    font-size: 11px;
+    color: #666899;
+    letter-spacing: 1px;
+    margin-top: 4px;
+    text-transform: uppercase;
+  }
+
+  /* ── Stats ── */
+  #stats-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .stat-item {
+    background: rgba(255,255,255,.04);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: #aaaacc;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+  }
+
+  .stat-bar-bg {
+    background: rgba(255,255,255,.08);
+    border-radius: 99px;
+    height: 7px;
+    overflow: hidden;
+  }
+
+  .stat-bar {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .6s ease, background-color .4s ease;
+  }
+
+  .stat-bar.high   { background: linear-gradient(90deg, #4caf50, #69f0ae); }
+  .stat-bar.medium { background: linear-gradient(90deg, #ff9800, #ffcc02); }
+  .stat-bar.low    { background: linear-gradient(90deg, #f44336, #ff5252); }
+
+  /* ── Action buttons ── */
+  #action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .action-btn {
+    background: linear-gradient(135deg, #3a3a5c, #2d2d44);
+    border: 1px solid #555577;
+    border-radius: 14px;
+    color: #e0e0ff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 8px;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s, background .15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+  }
+
+  .action-btn .btn-emoji { font-size: 22px; }
+
+  .action-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4a4a7c, #3d3d5e);
+    box-shadow: 0 4px 15px rgba(150,100,255,.3);
+    transform: translateY(-2px);
+  }
+
+  .action-btn:active:not(:disabled) { transform: translateY(0); }
+
+  .action-btn:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+
+  .action-btn.feed     { border-color: #ff6b6b55; }
+  .action-btn.play     { border-color: #4ecdc455; }
+  .action-btn.sleep    { border-color: #a78bfa55; }
+  .action-btn.medicine { border-color: #6ee7b755; }
+
+  /* ── Bottom bar: chat + settings ── */
+  #bottom-bar {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .icon-btn {
+    background: rgba(255,255,255,.06);
+    border: 1px solid #444466;
+    border-radius: 12px;
+    color: #aaaacc;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 9px 14px;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+  }
+
+  .icon-btn:hover { background: rgba(255,255,255,.12); color: #e0e0ff; }
+  .icon-btn.active { background: rgba(150,80,255,.2); color: #c084fc; border-color: #9633ff55; }
+
+  /* ── Chat panel ── */
+  #chat-panel {
+    display: none;
+    flex-direction: column;
+    background: rgba(0,0,0,.3);
+    border: 1px solid #333355;
+    border-radius: 16px;
+    margin-top: 12px;
+    overflow: hidden;
+  }
+
+  #chat-panel.open { display: flex; }
+
+  #chat-messages {
+    height: 160px;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #444466 transparent;
+  }
+
+  .msg {
+    max-width: 82%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .msg.pet {
+    background: linear-gradient(135deg, #3730a3, #4c1d95);
+    color: #e0e7ff;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+
+  .msg.player {
+    background: linear-gradient(135deg, #065f46, #047857);
+    color: #d1fae5;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg.system {
+    background: rgba(255,255,255,.06);
+    color: #888899;
+    align-self: center;
+    font-size: 11px;
+    border-radius: 8px;
+  }
+
+  #chat-input-row {
+    display: flex;
+    border-top: 1px solid #333355;
+  }
+
+  #chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #e0e0ff;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+  }
+
+  #chat-input::placeholder { color: #555577; }
+
+  #chat-send {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 10px 14px;
+    transition: background .15s;
+  }
+
+  #chat-send:hover { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+  /* ── API Key panel ── */
+  #api-panel {
+    display: none;
+    background: rgba(0,0,0,.3);
+    border: 1px solid #333355;
+    border-radius: 16px;
+    margin-top: 12px;
+    padding: 14px;
+  }
+
+  #api-panel.open { display: block; }
+
+  #api-panel h3 {
+    color: #c084fc;
+    font-size: 13px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #api-panel p {
+    color: #888899;
+    font-size: 11px;
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+
+  #api-key-input {
+    width: 100%;
+    background: rgba(255,255,255,.06);
+    border: 1px solid #444466;
+    border-radius: 10px;
+    color: #e0e0ff;
+    font-size: 12px;
+    padding: 9px 12px;
+    outline: none;
+    font-family: monospace;
+    margin-bottom: 10px;
+    transition: border-color .2s;
+  }
+
+  #api-key-input:focus { border-color: #7c3aed; }
+
+  .api-btn-row { display: flex; gap: 8px; }
+
+  .api-btn {
+    flex: 1;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 9px;
+    transition: opacity .15s;
+  }
+
+  .api-btn.save   { background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; }
+  .api-btn.remove { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid #f8717155; }
+  .api-btn:hover  { opacity: .85; }
+
+  #api-status {
+    font-size: 11px;
+    margin-top: 8px;
+    color: #888899;
+    min-height: 16px;
+  }
+
+  #api-status.ok  { color: #6ee7b7; }
+  #api-status.err { color: #f87171; }
+
+  /* ── Toast notification ── */
+  #toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(20,20,40,.95);
+    border: 1px solid #555577;
+    border-radius: 20px;
+    color: #e0e0ff;
+    font-size: 13px;
+    padding: 10px 20px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .3s, transform .3s;
+    z-index: 100;
+    white-space: nowrap;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── Modal overlay ── */
+  #modal {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    border-radius: 40px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 50;
+    animation: fadeIn .3s ease;
+  }
+
+  #modal.open { display: flex; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal-card {
+    background: linear-gradient(160deg, #2d2d44, #1e1e30);
+    border: 1px solid #555577;
+    border-radius: 20px;
+    padding: 24px 28px;
+    text-align: center;
+    max-width: 280px;
+  }
+
+  .modal-emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+
+  .modal-title {
+    color: #e0e0ff;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .modal-text {
+    color: #888899;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 18px;
+  }
+
+  .modal-input {
+    width: 100%;
+    background: rgba(255,255,255,.06);
+    border: 1px solid #444466;
+    border-radius: 10px;
+    color: #e0e0ff;
+    font-size: 15px;
+    padding: 10px 14px;
+    outline: none;
+    text-align: center;
+    margin-bottom: 14px;
+    transition: border-color .2s;
+  }
+
+  .modal-input:focus { border-color: #7c3aed; }
+
+  .modal-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    transition: opacity .15s;
+  }
+
+  .modal-btn:hover { opacity: .85; }
+  .modal-btn.danger { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+
+  /* ── Sick indicator ── */
+  #sick-badge {
+    display: none;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(239,68,68,.2);
+    border: 1px solid #f8717155;
+    border-radius: 20px;
+    color: #fca5a5;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    animation: pulse 1.5s infinite;
+  }
+
+  #sick-badge.show { display: block; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: .5; }
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #444466; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="device">
+  <!-- Modal overlay (name + death) -->
+  <div id="modal">
+    <div class="modal-card" id="modal-card">
+      <!-- content injected by JS -->
+    </div>
+  </div>
+
+  <!-- Screen -->
+  <div id="screen">
+    <div id="sick-badge">🤒 Krank</div>
+    <canvas id="pet-canvas" width="200" height="160"></canvas>
+    <div id="age-display">Alter: 0 Ticks</div>
+
+    <!-- Stats -->
+    <div id="stats-panel">
+      <div class="stat-item">
+        <div class="stat-label"><span>🍖 Hunger</span><span id="val-hunger">80</span></div>
+        <div class="stat-bar-bg"><div class="stat-bar high" id="bar-hunger" style="width:80%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label"><span>❤️ Gesundheit</span><span id="val-health">100</span></div>
+        <div class="stat-bar-bg"><div class="stat-bar high" id="bar-health" style="width:100%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label"><span>😊 Glück</span><span id="val-happiness">80</span></div>
+        <div class="stat-bar-bg"><div class="stat-bar high" id="bar-happiness" style="width:80%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label"><span>⚡ Energie</span><span id="val-energy">80</span></div>
+        <div class="stat-bar-bg"><div class="stat-bar high" id="bar-energy" style="width:80%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div id="action-buttons">
+    <button class="action-btn feed"     onclick="feed()">
+      <span class="btn-emoji">🍖</span>Füttern
+    </button>
+    <button class="action-btn play"     onclick="play()">
+      <span class="btn-emoji">🎮</span>Spielen
+    </button>
+    <button class="action-btn sleep"    onclick="toggleSleep()">
+      <span class="btn-emoji">😴</span>Schlafen
+    </button>
+    <button class="action-btn medicine" onclick="giveMedicine()">
+      <span class="btn-emoji">💊</span>Medizin
+    </button>
+  </div>
+
+  <!-- Bottom bar -->
+  <div id="bottom-bar">
+    <button class="icon-btn" id="chat-toggle-btn" onclick="toggleChat()" title="Chat">💬 Chat</button>
+    <button class="icon-btn" id="api-toggle-btn"  onclick="toggleApiPanel()" title="KI-Einstellungen">🔑 KI</button>
+  </div>
+
+  <!-- Chat panel -->
+  <div id="chat-panel">
+    <div id="chat-messages"></div>
+    <div id="chat-input-row">
+      <input id="chat-input" type="text" maxlength="200"
+             placeholder="Schreib deinem Haustier…"
+             onkeydown="if(event.key==='Enter')sendChat()">
+      <button id="chat-send" onclick="sendChat()">➤</button>
+    </div>
+  </div>
+
+  <!-- API key panel -->
+  <div id="api-panel">
+    <h3>🔑 OpenAI API-Key</h3>
+    <p>Gib deinen eigenen ChatGPT API-Key ein, um echte KI-Antworten zu erhalten. Ohne Key antwortet das Haustier simuliert.</p>
+    <input id="api-key-input" type="password" placeholder="sk-proj-..." maxlength="200">
+    <div class="api-btn-row">
+      <button class="api-btn save"   onclick="saveApiKey()">Speichern</button>
+      <button class="api-btn remove" onclick="removeApiKey()">Entfernen</button>
+    </div>
+    <div id="api-status"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const TICK_MS        = 10000;
+  const OFFLINE_CAP    = 30;
+  const BUSY_MS        = 1500;
+  const SAVE_KEY       = 'tamagotchi_save';
+  const API_KEY_STORE  = 'tamagotchi_apikey';
+  const CHAT_CAP       = 20;
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let state = defaultState();
+  let busy  = false;
+  let tickTimer = null;
+  let animId    = null;
+  let animT     = 0;         // animation time counter
+  let lowHungerTicks = 0;   // consecutive ticks with hunger < 15
+
+  function defaultState() {
+    return {
+      version:     1,
+      name:        'Pixi',
+      hunger:      80,
+      happiness:   80,
+      health:      100,
+      energy:      80,
+      isSick:      false,
+      isSleeping:  false,
+      isDead:      false,
+      age:         0,
+      lastSave:    Date.now(),
+      chatHistory: [],
+      petMood:     'idle'
+    };
+  }
+
+  // ── localStorage helpers ───────────────────────────────────────────────────
+  function lsGet(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(key, val); } catch { /* private mode */ }
+  }
+  function lsRemove(key) {
+    try { localStorage.removeItem(key); } catch { /* */ }
+  }
+
+  function saveState() {
+    const s = { ...state };
+    s.lastSave = Date.now();
+    s.chatHistory = state.chatHistory.slice(-CHAT_CAP);
+    lsSet(SAVE_KEY, JSON.stringify(s));
+  }
+
+  function loadState() {
+    const raw = lsGet(SAVE_KEY);
+    if (!raw) return;
+    try {
+      const s = JSON.parse(raw);
+      if (!s || s.version !== 1) return;
+      // Merge fields, clamp numbers
+      const nums = ['hunger','happiness','health','energy'];
+      nums.forEach(k => { if (typeof s[k] === 'number') state[k] = clamp(s[k]); });
+      ['name','isSick','isSleeping','isDead','age','chatHistory','petMood'].forEach(k => {
+        if (k in s) state[k] = s[k];
+      });
+      state.lastSave = s.lastSave || Date.now();
+      // Offline catchup
+      const elapsed = Date.now() - state.lastSave;
+      const missedTicks = Math.min(Math.floor(elapsed / TICK_MS), OFFLINE_CAP);
+      for (let i = 0; i < missedTicks; i++) applyDecay(true);
+    } catch { /* corrupt save */ }
+  }
+
+  function loadApiKey() {
+    const k = lsGet(API_KEY_STORE);
+    state.apiKey = (k && k.trim()) ? k.trim() : null;
+    updateApiStatus();
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function clamp(v, lo = 0, hi = 100) { return Math.max(lo, Math.min(hi, Math.round(v))); }
+
+  function setStat(key, val) {
+    state[key] = clamp(val);
+    renderStats();
+  }
+
+  function setMood(mood, durationMs) {
+    state.petMood = mood;
+    if (durationMs) setTimeout(() => { if (!state.isDead) state.petMood = state.isSick ? 'sick' : (state.isSleeping ? 'sleeping' : 'idle'); }, durationMs);
+  }
+
+  // ── Game loop ──────────────────────────────────────────────────────────────
+  function gameTick() {
+    if (state.isDead) return;
+    applyDecay(false);
+    checkSickness();
+    checkDeath();
+    state.age++;
+    saveState();
+    render();
+    // Occasional unsolicited pet message
+    if (!state.isSleeping && Math.random() < 0.15) {
+      const msg = getSimulatedResponse('');
+      appendChat(msg, 'pet');
+    }
+  }
+
+  function applyDecay(silent) {
+    if (state.isDead) return;
+    if (state.isSleeping) {
+      setStat('energy', state.energy + 5);
+      if (state.energy >= 100) {
+        state.isSleeping = false;
+        state.petMood = 'idle';
+        if (!silent) showToast('😊 ' + state.name + ' ist aufgewacht!');
+        renderButtons();
+      }
+      return;
+    }
+    setStat('hunger',    state.hunger    - 2);
+    setStat('happiness', state.happiness - 1);
+    setStat('energy',    state.energy    - 1);
+
+    if (state.isSick) {
+      setStat('hunger',    state.hunger    - 1);
+      setStat('happiness', state.happiness - 2);
+      setStat('health',    state.health    - 3);
+      setStat('energy',    state.energy    - 2);
+    }
+
+    if (state.hunger < 20) {
+      setStat('happiness', state.happiness - 2);
+      setStat('health',    state.health    - 2);
+    }
+
+    if (state.energy <= 0 && !state.isSleeping) {
+      state.isSleeping = true;
+      setMood('sleeping');
+      if (!silent) showToast('😴 ' + state.name + ' schläft ein!');
+      renderButtons();
+    }
+  }
+
+  function checkSickness() {
+    if (state.isSick) return;
+    if (state.hunger < 15) {
+      lowHungerTicks++;
+      if (lowHungerTicks >= 2) {
+        state.isSick = true;
+        setMood('sick');
+        showToast('🤒 ' + state.name + ' ist krank geworden!');
+        document.getElementById('sick-badge').classList.add('show');
+      }
+    } else {
+      lowHungerTicks = 0;
+    }
+  }
+
+  function checkDeath() {
+    if (state.health <= 0) {
+      state.isDead = true;
+      setMood('dead');
+      stopLoop();
+      saveState();
+      showDeathModal();
+    }
+  }
+
+  function startLoop() {
+    if (tickTimer) clearInterval(tickTimer);
+    tickTimer = setInterval(gameTick, TICK_MS);
+    animLoop();
+  }
+
+  function stopLoop() {
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (animId)    { cancelAnimationFrame(animId); animId = null; }
+  }
+
+  // ── Animation loop ─────────────────────────────────────────────────────────
+  function animLoop() {
+    animT += 0.05;
+    drawPet();
+    animId = requestAnimationFrame(animLoop);
+  }
+
+  // ── Canvas drawing ─────────────────────────────────────────────────────────
+  function drawPet() {
+    const canvas = document.getElementById('pet-canvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const mood = state.petMood;
+    const cx = W / 2;
+    const cy = H / 2 + (mood === 'idle' ? Math.sin(animT) * 5 : 0);
+
+    // Body
+    ctx.save();
+    if (mood === 'sick') ctx.filter = 'saturate(0.3) brightness(0.8)';
+    if (mood === 'dead') ctx.filter = 'grayscale(1) brightness(0.5)';
+
+    // Main body blob
+    const grad = ctx.createRadialGradient(cx-10, cy-15, 5, cx, cy, 55);
+    if (mood === 'sick') {
+      grad.addColorStop(0, '#a0e080');
+      grad.addColorStop(1, '#5a8040');
+    } else if (mood === 'sleeping') {
+      grad.addColorStop(0, '#9090cc');
+      grad.addColorStop(1, '#505080');
+    } else {
+      grad.addColorStop(0, '#e87bff');
+      grad.addColorStop(1, '#9933ff');
+    }
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 10, 48, 42, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ears
+    ctx.fillStyle = mood === 'sick' ? '#7ab060' : (mood === 'sleeping' ? '#7070a0' : '#cc55ff');
+    ctx.beginPath();
+    ctx.ellipse(cx - 30, cy - 28, 12, 18, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 30, cy - 28, 12, 18, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner ears
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 30, cy - 28, 6, 10, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + 30, cy - 28, 6, 10, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    if (mood === 'dead') {
+      // X eyes
+      const drawX = (ex, ey) => {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ex-8,ey-8); ctx.lineTo(ex+8,ey+8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ex+8,ey-8); ctx.lineTo(ex-8,ey+8); ctx.stroke();
+      };
+      drawX(cx - 15, cy - 5);
+      drawX(cx + 15, cy - 5);
+    } else if (mood === 'sleeping') {
+      // Closed eyes (lines)
+      ctx.strokeStyle = '#ccccee';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx-22,cy-5); ctx.lineTo(cx-8,cy-5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+8,cy-5);  ctx.lineTo(cx+22,cy-5); ctx.stroke();
+      // ZZZ
+      ctx.fillStyle = 'rgba(200,200,255,.7)';
+      ctx.font = 'bold 14px system-ui';
+      ctx.fillText('z', cx+35, cy - 20 + Math.sin(animT*0.8)*4);
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText('z', cx+44, cy - 32 + Math.sin(animT*0.8+1)*4);
+    } else {
+      // Normal eyes
+      const eyeSize = mood === 'happy' ? 10 : 8;
+      ctx.fillStyle = '#1a1a2e';
+      ctx.beginPath(); ctx.arc(cx-15, cy-5, eyeSize, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx+15, cy-5, eyeSize, 0, Math.PI*2); ctx.fill();
+      // Shine
+      ctx.fillStyle = 'white';
+      ctx.beginPath(); ctx.arc(cx-12, cy-8, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx+18, cy-8, 3, 0, Math.PI*2); ctx.fill();
+      // Pupils
+      ctx.fillStyle = '#4a00e0';
+      ctx.beginPath(); ctx.arc(cx-14, cy-4, eyeSize*0.45, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx+16, cy-4, eyeSize*0.45, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Mouth
+    ctx.strokeStyle = 'rgba(255,255,255,.8)';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (mood === 'happy') {
+      // Big smile + wiggle
+      const w = Math.sin(animT * 4) * 3;
+      ctx.arc(cx + w, cy + 12, 16, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      // Rosy cheeks
+      ctx.fillStyle = 'rgba(255,150,180,.35)';
+      ctx.beginPath(); ctx.ellipse(cx-28, cy+8, 10, 7, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+28, cy+8, 10, 7, 0, 0, Math.PI*2); ctx.fill();
+    } else if (mood === 'eating') {
+      // Open mouth
+      ctx.arc(cx, cy+14, 12, 0, Math.PI);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(200,50,50,.6)';
+      ctx.beginPath(); ctx.arc(cx, cy+14, 11, 0, Math.PI); ctx.fill();
+      // Food particle
+      const fx = cx + Math.cos(animT*3)*20;
+      const fy = cy - 20 + Math.sin(animT*3)*10;
+      ctx.font = '16px serif';
+      ctx.fillText('🍖', fx-8, fy);
+    } else if (mood === 'sick') {
+      // Wavy/unhappy mouth
+      ctx.beginPath();
+      ctx.moveTo(cx-12, cy+16);
+      ctx.quadraticCurveTo(cx, cy+10, cx+12, cy+16);
+      ctx.stroke();
+      // Sweat drop
+      ctx.fillStyle = 'rgba(100,200,255,.8)';
+      ctx.beginPath(); ctx.arc(cx+30, cy-18, 5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx+30, cy-13);
+      ctx.lineTo(cx+27, cy-6);
+      ctx.lineTo(cx+33, cy-6);
+      ctx.closePath(); ctx.fill();
+    } else if (mood === 'dead') {
+      // Flat/sad
+      ctx.beginPath();
+      ctx.moveTo(cx-12, cy+18);
+      ctx.lineTo(cx+12, cy+18);
+      ctx.stroke();
+    } else {
+      // Neutral smile
+      ctx.arc(cx, cy+14, 10, 0.3, Math.PI-0.3);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  function withBusy(fn) {
+    if (busy || state.isDead) return;
+    if (state.isSleeping && fn !== toggleSleep) { showToast('😴 ' + state.name + ' schläft noch!'); return; }
+    busy = true;
+    fn();
+    renderButtons();
+    setTimeout(() => { busy = false; renderButtons(); }, BUSY_MS);
+  }
+
+  function feed() {
+    withBusy(() => {
+      if (state.hunger >= 100) { showToast('😋 ' + state.name + ' ist schon satt!'); busy = false; renderButtons(); return; }
+      setStat('hunger', state.hunger + 25);
+      setMood('eating', BUSY_MS);
+      showToast('🍖 Lecker!');
+    });
+  }
+
+  function play() {
+    withBusy(() => {
+      if (state.energy < 10) { showToast('😴 Zu müde zum Spielen!'); busy = false; renderButtons(); return; }
+      setStat('happiness', state.happiness + 20);
+      setStat('energy',    state.energy    - 10);
+      setMood('happy', BUSY_MS);
+      showToast('🎮 So viel Spaß!');
+    });
+  }
+
+  function toggleSleep() {
+    if (busy || state.isDead) return;
+    if (state.isSleeping) {
+      state.isSleeping = false;
+      state.petMood = state.isSick ? 'sick' : 'idle';
+      showToast('☀️ Aufgewacht!');
+    } else {
+      state.isSleeping = true;
+      setMood('sleeping');
+      showToast('😴 Gute Nacht!');
+    }
+    renderButtons();
+  }
+
+  function giveMedicine() {
+    withBusy(() => {
+      if (!state.isSick) { showToast('💊 ' + state.name + ' ist nicht krank!'); busy = false; renderButtons(); return; }
+      state.isSick = false;
+      lowHungerTicks = 0;
+      setStat('health',    state.health    + 30);
+      setStat('happiness', state.happiness - 5);
+      setMood('idle');
+      document.getElementById('sick-badge').classList.remove('show');
+      showToast('💊 ' + state.name + ' fühlt sich besser!');
+    });
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function render() {
+    renderStats();
+    renderButtons();
+    document.getElementById('age-display').textContent = 'Alter: ' + state.age + ' Ticks';
+    document.getElementById('sick-badge').classList.toggle('show', state.isSick);
+  }
+
+  function renderStats() {
+    const keys = ['hunger','health','happiness','energy'];
+    keys.forEach(k => {
+      const v = state[k];
+      document.getElementById('val-' + k).textContent = v;
+      const bar = document.getElementById('bar-' + k);
+      bar.style.width = v + '%';
+      bar.className = 'stat-bar ' + (v > 60 ? 'high' : v > 30 ? 'medium' : 'low');
+    });
+  }
+
+  function renderButtons() {
+    const dead    = state.isDead;
+    const sleeping = state.isSleeping;
+    document.querySelectorAll('.action-btn').forEach(b => b.disabled = dead || busy);
+    const sleepBtn = document.querySelector('.action-btn.sleep');
+    if (sleepBtn) {
+      sleepBtn.disabled = dead || (busy && !sleeping);
+      sleepBtn.querySelector('.btn-emoji').textContent = sleeping ? '☀️' : '😴';
+      sleepBtn.childNodes[sleepBtn.childNodes.length - 1].textContent = sleeping ? 'Aufwachen' : 'Schlafen';
+    }
+  }
+
+  // ── Chat ───────────────────────────────────────────────────────────────────
+  function toggleChat() {
+    const panel = document.getElementById('chat-panel');
+    const btn   = document.getElementById('chat-toggle-btn');
+    const open  = panel.classList.toggle('open');
+    btn.classList.toggle('active', open);
+    if (open && state.chatHistory.length === 0) {
+      appendChat('Hallo! Ich bin ' + state.name + ' 🐾 Wie schön, dass du da bist!', 'pet');
+    }
+  }
+
+  function toggleApiPanel() {
+    const panel = document.getElementById('api-panel');
+    const btn   = document.getElementById('api-toggle-btn');
+    const open  = panel.classList.toggle('open');
+    btn.classList.toggle('active', open);
+    if (open) document.getElementById('api-key-input').value = state.apiKey || '';
+  }
+
+  function appendChat(text, who) {
+    const msgs = document.getElementById('chat-messages');
+    const div  = document.createElement('div');
+    div.className = 'msg ' + who;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    if (who !== 'system') {
+      state.chatHistory.push({ role: who === 'player' ? 'user' : 'assistant', content: text });
+      if (state.chatHistory.length > CHAT_CAP) state.chatHistory.shift();
+    }
+  }
+
+  async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const text  = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    appendChat(text, 'player');
+
+    let reply;
+    if (state.apiKey) {
+      reply = await getAIResponse(text);
+    } else {
+      reply = getSimulatedResponse(text);
+    }
+    appendChat(reply, 'pet');
+  }
+
+  async function getAIResponse(playerText) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + state.apiKey
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 120,
+          messages: [
+            { role: 'system', content: buildSystemPrompt() },
+            ...state.chatHistory.slice(-6),
+            { role: 'user', content: playerText }
+          ]
+        })
+      });
+      clearTimeout(timeout);
+      if (resp.status === 401) {
+        return '🔑 Hmm, mein KI-Hirn streikt... Stimmt der API-Schlüssel?';
+      }
+      if (resp.status === 429) {
+        return getSimulatedResponse(playerText);
+      }
+      const data = await resp.json();
+      return data.choices?.[0]?.message?.content || getSimulatedResponse(playerText);
+    } catch (err) {
+      clearTimeout(timeout);
+      return getSimulatedResponse(playerText);
+    }
+  }
+
+  function buildSystemPrompt() {
+    return `Du bist ${state.name}, ein niedliches digitales Haustier im Tamagotchi-Stil.
+Du sprichst ausschließlich auf Deutsch, sehr kurz und süß (1-3 Sätze).
+Du verwendest Tier-Laute, niedliche Ausdrücke und passende Emojis.
+Dein aktueller Zustand: Hunger=${state.hunger}/100, Glück=${state.happiness}/100, Gesundheit=${state.health}/100, Energie=${state.energy}/100.
+${state.isSick ? 'Du bist gerade krank und fühlst dich schlecht.' : ''}
+${state.isSleeping ? 'Du bist gerade müde und schläfrig.' : ''}
+Reagiere auf das, was der Spieler sagt, und erwähne manchmal deinen aktuellen Zustand auf süße Art. Bleib immer im Charakter.`;
+  }
+
+  function getSimulatedResponse(playerText) {
+    const t = playerText.toLowerCase();
+
+    // Keyword reactions
+    if (/hallo|hi|hey|guten/.test(t))
+      return pick(['Halli-hallo! 👋 Wie schön, dass du da bist!', 'Hey hey hey! 🐾 Ich hab schon auf dich gewartet!', 'Juhu, mein Lieblings-Mensch! ✨']);
+    if (/essen|futter|hunger|fressen/.test(t))
+      return pick(['Mein Bauch knurrt so laut! 🍖 Bitte füttere mich!', 'Oh ja, ich könnte etwas essen! 😋', 'Haaaaanger! 🍗 Bitte bitte bitte!']);
+    if (/spielen|spiel|spaß/.test(t))
+      return pick(['Ja ja ja! Spielen! 🎮 Ich liebe Spiele!', 'Komm spielen wir! 🎉', 'Oh yesss, ich will spielen! ✨']);
+    if (/liebe|mag dich|süß/.test(t))
+      return pick(['Ich liebe dich auch! 💜 Du bist der Beste!', 'Awww... du machst mich so glücklich! 🥰', '💜💜💜 Ich mag dich sooooo sehr!']);
+    if (/schlafen|müde|schlaf/.test(t))
+      return pick(['*gähn* Ja... ich bin auch ein bisschen müde... 😴', 'Schlafen klingt gut... 💤 Aber erstmal kuscheln!', 'Zzzz... warte, ich bin noch wach! 😅']);
+    if (/krank|medizin|pille/.test(t))
+      return state.isSick
+        ? pick(['Mir geht es gar nicht gut... 🤒 Ich brauche Medizin!', 'Bitte gib mir die Pille... 💊 Ich fühle mich so schlecht.'])
+        : pick(['Ich bin fit wie ein Turnschuh! 💪', 'Zum Glück bin ich gesund! 😊']);
+    if (/tschüss|bye|ciao|auf wiedersehen/.test(t))
+      return pick(['Nicht gehen! 😢 Ich vermisse dich schon jetzt!', 'Tschüss! Komm schnell wieder! 🐾', 'Bis bald! 👋 Ich warte auf dich!']);
+
+    // Stat-based responses
+    if (state.hunger < 25)
+      return pick(['Ich habe sooo Hunger... 😢 Bitte füttere mich!', 'Mein Magen ist fast leer! 🍖 Hilfe!', 'Hungrig... so hungrig... 🥺']);
+    if (state.happiness < 25)
+      return pick(['Ich bin so traurig... 😔 Spielst du mit mir?', 'Bin ein bisschen down... 🌧️ Kuschel-Zeit?', 'Ich vermisse Spaß... 😢']);
+    if (state.isSick)
+      return pick(['Mir geht es gar nicht gut... 🤒', 'Ich fühle mich krank... 💊 Bitte hilf mir!', 'Alles dreht sich... 😵 Medizin?']);
+    if (state.energy < 25)
+      return pick(['*gähn* Ich bin sooo müde... 😴', 'Schlafen... brauche Schlaf... 💤', 'Meine Augen werden schwer... 😪']);
+    if (state.happiness > 70 && state.hunger > 60)
+      return pick(['Ich bin so glücklich! 🎉 Das Leben ist wunderschön!', 'Alles ist perfekt! 🌟 Danke, dass du für mich sorgst!', 'Jaaa! Heute ist ein toller Tag! 💜✨', 'Ich könnte vor Freude tanzen! 🕺🐾']);
+
+    // Idle
+    return pick([
+      'Was machst du gerade so? 🤔',
+      'Spielen wir zusammen! 🎮',
+      'Ich denke gerade an nichts... 🌸',
+      'Weißt du was? Du bist mein liebster Mensch! 💜',
+      'Boing boing boing! 🐾 Ich bin einfach glücklich!',
+      'Psst... willst du ein Geheimnis hören? Ich mag dich sehr! 🤫💜',
+      'Ich hab gerade getanzt, als du nicht geschaut hast. 🕺',
+      '*Wedelt aufgeregt mit dem Schwanz* 🐾'
+    ]);
+  }
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  // ── API Key management ──────────────────────────────────────────────────────
+  function saveApiKey() {
+    const val = document.getElementById('api-key-input').value.trim();
+    if (!val) { setApiStatus('Bitte einen Key eingeben.', 'err'); return; }
+    if (!val.startsWith('sk-')) { setApiStatus('Kein gültiger OpenAI-Key (muss mit sk- beginnen).', 'err'); return; }
+    lsSet(API_KEY_STORE, val);
+    state.apiKey = val;
+    setApiStatus('✅ Key gespeichert! KI-Modus aktiv.', 'ok');
+  }
+
+  function removeApiKey() {
+    lsRemove(API_KEY_STORE);
+    state.apiKey = null;
+    document.getElementById('api-key-input').value = '';
+    setApiStatus('Key entfernt. Simulierter Modus aktiv.', '');
+  }
+
+  function setApiStatus(msg, cls) {
+    const el = document.getElementById('api-status');
+    el.textContent = msg;
+    el.className = cls ? 'api-status ' + cls : '';
+  }
+
+  function updateApiStatus() {
+    if (state.apiKey) setApiStatus('✅ KI-Modus aktiv.', 'ok');
+    else setApiStatus('Kein Key – simulierter Modus.', '');
+  }
+
+  // ── Modals ──────────────────────────────────────────────────────────────────
+  function showNameModal() {
+    const modal = document.getElementById('modal');
+    const card  = document.getElementById('modal-card');
+    card.innerHTML = `
+      <span class="modal-emoji">🐣</span>
+      <div class="modal-title">Willkommen!</div>
+      <div class="modal-text">Dein digitales Haustier ist geschlüpft!<br>Wie soll es heißen?</div>
+      <input class="modal-input" id="name-input" type="text" maxlength="12" placeholder="Pixi" value="">
+      <button class="modal-btn" onclick="confirmName()">Los geht's! 🎉</button>
+    `;
+    modal.classList.add('open');
+    setTimeout(() => {
+      const inp = document.getElementById('name-input');
+      if (inp) inp.focus();
+    }, 50);
+  }
+
+  function confirmName() {
+    const inp = document.getElementById('name-input');
+    const name = (inp ? inp.value.trim() : '') || 'Pixi';
+    state.name = name.slice(0, 12);
+    document.getElementById('modal').classList.remove('open');
+    saveState();
+    startLoop();
+    render();
+    showToast('🐣 Hallo ' + state.name + '!');
+  }
+
+  function showDeathModal() {
+    const modal = document.getElementById('modal');
+    const card  = document.getElementById('modal-card');
+    card.innerHTML = `
+      <span class="modal-emoji">💀</span>
+      <div class="modal-title">${state.name} ist gegangen...</div>
+      <div class="modal-text">Dein Haustier hat es nicht geschafft. 😢<br>Du hast ${state.age} Ticks zusammen verbracht.</div>
+      <button class="modal-btn danger" onclick="resetGame()" style="margin-bottom:8px">Neu starten 🐣</button>
+    `;
+    modal.classList.add('open');
+  }
+
+  function resetGame() {
+    stopLoop();
+    lsRemove(SAVE_KEY);
+    lowHungerTicks = 0;
+    state = defaultState();
+    state.apiKey = lsGet(API_KEY_STORE) || null;
+    document.getElementById('modal').classList.remove('open');
+    document.getElementById('sick-badge').classList.remove('show');
+    document.getElementById('chat-messages').innerHTML = '';
+    renderStats();
+    renderButtons();
+    showNameModal();
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  }
+
+  // ── Tab visibility ─────────────────────────────────────────────────────────
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      saveState();
+    } else {
+      // Offline catchup
+      const elapsed = Date.now() - state.lastSave;
+      const missed  = Math.min(Math.floor(elapsed / TICK_MS), OFFLINE_CAP);
+      for (let i = 0; i < missed; i++) applyDecay(true);
+      if (missed > 0) { checkSickness(); checkDeath(); saveState(); render(); }
+    }
+  });
+
+  // ── Expose globals for inline handlers ─────────────────────────────────────
+  window.feed         = feed;
+  window.play         = play;
+  window.toggleSleep  = toggleSleep;
+  window.giveMedicine = giveMedicine;
+  window.sendChat     = sendChat;
+  window.toggleChat   = toggleChat;
+  window.toggleApiPanel = toggleApiPanel;
+  window.saveApiKey   = saveApiKey;
+  window.removeApiKey = removeApiKey;
+  window.confirmName  = confirmName;
+  window.resetGame    = resetGame;
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+  function init() {
+    loadState();
+    loadApiKey();
+    render();
+
+    if (!lsGet(SAVE_KEY)) {
+      // First run → show name modal
+      showNameModal();
+    } else if (state.isDead) {
+      showDeathModal();
+    } else {
+      startLoop();
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

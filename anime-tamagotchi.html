@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Anime Tamagotchi</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0d0d1a; touch-action:none; }
+  #cv { display:block; width:100%; height:100%; }
+
+  /* Stats overlay */
+  #stats {
+    position:fixed; top:0; left:0; right:0;
+    padding: env(safe-area-inset-top,12px) 16px 12px;
+    display:flex; gap:8px; z-index:10;
+    background: linear-gradient(to bottom, rgba(0,0,0,.6), transparent);
+  }
+  .sbar { flex:1; }
+  .slabel { font:600 10px system-ui; color:rgba(255,255,255,.7); letter-spacing:.5px; text-transform:uppercase; margin-bottom:3px; }
+  .strack { background:rgba(255,255,255,.12); border-radius:99px; height:6px; overflow:hidden; }
+  .sfill  { height:100%; border-radius:99px; transition: width .6s ease; }
+  .sfill.hunger    { background:linear-gradient(90deg,#f97316,#fb923c); }
+  .sfill.happiness { background:linear-gradient(90deg,#ec4899,#f472b6); }
+  .sfill.health    { background:linear-gradient(90deg,#22c55e,#4ade80); }
+  .sfill.energy    { background:linear-gradient(90deg,#a855f7,#c084fc); }
+
+  /* Action buttons */
+  #actions {
+    position:fixed; bottom:0; left:0; right:0;
+    padding: 12px 16px env(safe-area-inset-bottom,16px);
+    display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px;
+    background: linear-gradient(to top, rgba(0,0,0,.7), transparent);
+    z-index:10;
+  }
+  .abtn {
+    background:rgba(255,255,255,.1);
+    backdrop-filter:blur(10px);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius:16px; color:white;
+    cursor:pointer; font-size:11px; font-weight:600;
+    padding:10px 4px 8px; text-align:center;
+    transition: transform .1s, background .15s;
+    user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  .abtn:active { transform:scale(.93); background:rgba(255,255,255,.2); }
+  .abtn span { display:block; font-size:22px; margin-bottom:3px; }
+  .abtn:disabled { opacity:.3; cursor:default; }
+
+  /* Name + age */
+  #nameplate {
+    position:fixed; top:0; left:50%; transform:translateX(-50%);
+    padding-top: calc(env(safe-area-inset-top,12px) + 4px);
+    font:700 13px system-ui; color:rgba(255,255,255,.6);
+    letter-spacing:1px; text-transform:uppercase; z-index:11;
+    pointer-events:none;
+  }
+
+  /* Mood label */
+  #moodlabel {
+    position:fixed; right:16px; bottom:100px;
+    font:600 11px system-ui; color:rgba(255,255,255,.5);
+    letter-spacing:.5px; text-transform:uppercase; z-index:10;
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="stats">
+  <div class="sbar"><div class="slabel">🍙 Hunger</div><div class="strack"><div class="sfill hunger" id="b-hunger" style="width:80%"></div></div></div>
+  <div class="sbar"><div class="slabel">💖 Glück</div><div class="strack"><div class="sfill happiness" id="b-happy" style="width:80%"></div></div></div>
+  <div class="sbar"><div class="slabel">💊 HP</div><div class="strack"><div class="sfill health" id="b-health" style="width:100%"></div></div></div>
+  <div class="sbar"><div class="slabel">⚡ EP</div><div class="strack"><div class="sfill energy" id="b-energy" style="width:80%"></div></div></div>
+</div>
+
+<div id="nameplate">Yuki · 0 Tage</div>
+<div id="moodlabel" id="moodlabel">Fröhlich</div>
+
+<div id="actions">
+  <button class="abtn" id="btn-feed">    <span>🍙</span>Füttern</button>
+  <button class="abtn" id="btn-play">    <span>🎀</span>Spielen</button>
+  <button class="abtn" id="btn-sleep">   <span>🌙</span>Schlafen</button>
+  <button class="abtn" id="btn-medicine"><span>💊</span>Medizin</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W, H, dpr;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W   = window.innerWidth;
+  H   = window.innerHeight;
+  cv.width  = W * dpr;
+  cv.height = H * dpr;
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Game state ────────────────────────────────────────────────────────────────
+const state = {
+  hunger:    80,
+  happiness: 80,
+  health:    100,
+  energy:    80,
+  isSick:    false,
+  isSleeping:false,
+  isDead:    false,
+  age:       0,
+  mood:      'idle',  // idle|happy|sad|eating|sleeping|sick|dead|surprised
+};
+
+let busy          = false;
+let animT         = 0;
+let blinkT        = 0;
+let nextBlink     = 3 + Math.random()*3;
+let blinking      = false;
+let blinkProgress = 0;
+let moodTimer     = 0;
+let particles     = [];
+let touchRipples  = [];
+let lowHungerTicks= 0;
+
+// ── Tick (game loop) ──────────────────────────────────────────────────────────
+setInterval(() => {
+  if (state.isDead) return;
+  if (state.isSleeping) {
+    setStat('energy', state.energy + 5);
+    if (state.energy >= 100) { state.isSleeping = false; setMood('happy', 2000); updateButtons(); }
+    return;
+  }
+  setStat('hunger',    state.hunger    - 2);
+  setStat('happiness', state.happiness - 1);
+  setStat('energy',    state.energy    - 1);
+  if (state.isSick) { setStat('health', state.health - 3); setStat('happiness', state.happiness - 2); }
+  if (state.hunger < 20) { setStat('health', state.health - 2); }
+  if (state.hunger < 15) {
+    lowHungerTicks++;
+    if (lowHungerTicks >= 2 && !state.isSick) { state.isSick = true; setMood('sick'); }
+  } else { lowHungerTicks = 0; }
+  if (state.energy <= 0 && !state.isSleeping) { state.isSleeping = true; setMood('sleeping'); updateButtons(); }
+  if (state.health <= 0) { state.isDead = true; setMood('dead'); updateButtons(); }
+  state.age++;
+  updateHUD();
+  autoMood();
+}, 10000);
+
+function setStat(k, v) {
+  state[k] = Math.max(0, Math.min(100, Math.round(v)));
+  updateHUD();
+}
+
+function autoMood() {
+  if (state.isDead || state.isSleeping || state.isSick) return;
+  if (state.hunger < 20)     setMood('sad');
+  else if (state.happiness > 70) { if (Math.random() < .3) { spawnParticles('hearts'); } }
+}
+
+function setMood(mood, durationMs) {
+  state.mood = mood;
+  updateMoodLabel();
+  if (durationMs) setTimeout(() => {
+    if (!state.isDead) {
+      state.mood = state.isSick ? 'sick' : state.isSleeping ? 'sleeping' : 'idle';
+      updateMoodLabel();
+    }
+  }, durationMs);
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  setBar('b-hunger', state.hunger);
+  setBar('b-happy',  state.happiness);
+  setBar('b-health', state.health);
+  setBar('b-energy', state.energy);
+  document.getElementById('nameplate').textContent = 'Yuki · ' + state.age + ' Ticks';
+}
+function setBar(id, v) {
+  document.getElementById(id).style.width = v + '%';
+}
+function updateMoodLabel() {
+  const map = { idle:'Entspannt', happy:'Fröhlich!', sad:'Traurig…', eating:'Lecker!', sleeping:'Schläft…', sick:'Krank…', dead:'☆', surprised:'Überrascht!' };
+  document.getElementById('moodlabel').textContent = map[state.mood] || state.mood;
+}
+function updateButtons() {
+  const dead = state.isDead;
+  document.querySelectorAll('.abtn').forEach(b => b.disabled = dead || busy);
+  const sb = document.getElementById('btn-sleep');
+  if (sb) { sb.querySelector('span').textContent = state.isSleeping ? '☀️' : '🌙'; sb.childNodes[sb.childNodes.length-1].textContent = state.isSleeping ? 'Aufwachen' : 'Schlafen'; }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-feed').addEventListener('click', () => {
+  if (busy || state.isDead || state.isSleeping) return;
+  if (state.hunger >= 100) return;
+  setBusy(true);
+  setStat('hunger', state.hunger + 25);
+  setMood('eating', 2000);
+  spawnParticles('food');
+  setTimeout(() => setBusy(false), 1500);
+});
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (busy || state.isDead || state.isSleeping) return;
+  setBusy(true);
+  setStat('happiness', state.happiness + 20);
+  setStat('energy',    state.energy    - 10);
+  setMood('happy', 2000);
+  spawnParticles('hearts');
+  setTimeout(() => setBusy(false), 1500);
+});
+document.getElementById('btn-sleep').addEventListener('click', () => {
+  if (busy || state.isDead) return;
+  state.isSleeping = !state.isSleeping;
+  setMood(state.isSleeping ? 'sleeping' : 'idle');
+  updateButtons();
+});
+document.getElementById('btn-medicine').addEventListener('click', () => {
+  if (busy || state.isDead || !state.isSick) return;
+  setBusy(true);
+  state.isSick = false;
+  lowHungerTicks = 0;
+  setStat('health', state.health + 30);
+  setStat('happiness', state.happiness - 5);
+  setMood('surprised', 1500);
+  spawnParticles('sparkle');
+  setTimeout(() => setBusy(false), 1500);
+});
+
+function setBusy(v) { busy = v; updateButtons(); }
+
+// ── Touch / tap on character ──────────────────────────────────────────────────
+cv.addEventListener('pointerdown', e => {
+  const cx = W / 2, cy = H * 0.45;
+  const dx = e.clientX - cx, dy = e.clientY - cy;
+  if (Math.sqrt(dx*dx+dy*dy) < H * 0.3) {
+    touchRipples.push({ x: e.clientX, y: e.clientY, r: 0, a: 1 });
+    if (!state.isDead && !state.isSleeping && !busy) {
+      setMood('surprised', 1200);
+      spawnParticles('hearts');
+    }
+  }
+});
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+function spawnParticles(type) {
+  const cx = W/2, cy = H*0.35;
+  const count = type === 'food' ? 5 : 8;
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI/2 + (Math.random()-.5)*Math.PI*1.2;
+    const speed = 1.5 + Math.random()*2.5;
+    particles.push({
+      x: cx + (Math.random()-.5)*60,
+      y: cy,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed - 1,
+      life: 1,
+      decay: .012 + Math.random()*.01,
+      type,
+      rot: Math.random()*Math.PI*2,
+      rotV: (Math.random()-.5)*.1,
+      size: 14 + Math.random()*10
+    });
+  }
+}
+
+// ── Main draw ─────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background gradient based on mood
+  const bgColors = {
+    idle:      ['#0d0d1a','#1a0d2e'],
+    happy:     ['#0d0d1a','#1a0d2e'],
+    sad:       ['#0a0a18','#0d1a2e'],
+    eating:    ['#0d0d1a','#1a100d'],
+    sleeping:  ['#060612','#0d0d1a'],
+    sick:      ['#0a120a','#0d1a0d'],
+    dead:      ['#0a0a0a','#111'],
+    surprised: ['#0d0d1a','#1a0d1a'],
+  };
+  const [c1, c2] = bgColors[state.mood] || ['#0d0d1a','#1a0d2e'];
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, c1); bg.addColorStop(1, c2);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Ambient glow behind character
+  drawAmbientGlow();
+
+  // Character center
+  const cx = W / 2;
+  const cy = H * 0.45;
+  const scale = Math.min(W, H) / 420;
+
+  // Update blink
+  blinkT += 0.016;
+  if (blinkT >= nextBlink && !blinking && state.mood !== 'sleeping' && state.mood !== 'dead') {
+    blinking = true; blinkProgress = 0;
+    nextBlink = 2.5 + Math.random()*4;
+    blinkT = 0;
+  }
+  if (blinking) {
+    blinkProgress += 0.12;
+    if (blinkProgress >= 1) { blinking = false; blinkProgress = 0; }
+  }
+
+  // Draw character
+  drawCharacter(ctx, cx, cy, scale);
+
+  // Draw particles
+  updateParticles();
+
+  // Touch ripples
+  touchRipples = touchRipples.filter(r => r.a > 0);
+  touchRipples.forEach(r => {
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(200,150,255,${r.a})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    r.r += 4; r.a -= 0.06;
+  });
+
+  animT += 0.025;
+  moodTimer += 0.025;
+  requestAnimationFrame(draw);
+}
+
+// ── Ambient glow ──────────────────────────────────────────────────────────────
+function drawAmbientGlow() {
+  const cx = W/2, cy = H*0.45;
+  const glowColors = {
+    idle:'rgba(120,60,200,.15)', happy:'rgba(240,100,200,.2)',
+    sad:'rgba(60,80,180,.15)',   eating:'rgba(200,100,60,.15)',
+    sleeping:'rgba(80,60,160,.1)', sick:'rgba(80,180,80,.12)',
+    dead:'rgba(60,60,80,.1)',    surprised:'rgba(200,100,240,.2)',
+  };
+  const gc = glowColors[state.mood] || 'rgba(120,60,200,.15)';
+  const r = Math.min(W,H) * 0.55 + Math.sin(animT*.7)*10;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, gc);
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ── Character drawing ─────────────────────────────────────────────────────────
+function drawCharacter(ctx, cx, cy, sc) {
+  const mood = state.mood;
+  const breath = Math.sin(animT * 1.2) * 4 * sc;
+  const wobble = mood === 'happy' ? Math.sin(animT * 4) * 5 * sc : 0;
+  const shake  = mood === 'sick'  ? Math.sin(animT * 8) * 2 * sc : 0;
+
+  ctx.save();
+  ctx.translate(cx + shake + wobble, cy + breath);
+
+  // ── Shadow / ground shadow ──
+  const sdw = ctx.createRadialGradient(0, 160*sc, 0, 0, 160*sc, 80*sc);
+  sdw.addColorStop(0, 'rgba(0,0,0,.25)'); sdw.addColorStop(1,'transparent');
+  ctx.fillStyle = sdw;
+  ctx.beginPath(); ctx.ellipse(0, 160*sc, 80*sc, 18*sc, 0, 0, Math.PI*2); ctx.fill();
+
+  // ── Body / dress ──
+  drawBody(ctx, sc, mood);
+
+  // ── Arms ──
+  drawArms(ctx, sc, mood, animT);
+
+  // ── Head ──
+  ctx.save();
+  if (mood === 'sleeping') ctx.translate(8*sc, 5*sc);
+  drawHead(ctx, sc, mood, breath);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ── Body ──────────────────────────────────────────────────────────────────────
+function drawBody(ctx, sc, mood) {
+  // Neck
+  ctx.fillStyle = '#fde8d8';
+  ctx.beginPath();
+  ctx.roundRect(-12*sc, -30*sc, 24*sc, 40*sc, 8*sc);
+  ctx.fill();
+
+  // Dress / outfit
+  const dressColor = mood === 'sick'     ? '#b0c8b0' :
+                     mood === 'sleeping' ? '#c4b0d8' :
+                     mood === 'sad'      ? '#9090b8' : '#c084fc';
+  const dressDark  = mood === 'sick'     ? '#8aaa8a' :
+                     mood === 'sleeping' ? '#9880b0' :
+                     mood === 'sad'      ? '#7070a0' : '#9333ea';
+
+  // Main dress shape
+  ctx.beginPath();
+  ctx.moveTo(-45*sc, 10*sc);
+  ctx.bezierCurveTo(-50*sc, 30*sc, -70*sc, 80*sc, -75*sc, 170*sc);
+  ctx.lineTo(75*sc, 170*sc);
+  ctx.bezierCurveTo(70*sc, 80*sc, 50*sc, 30*sc, 45*sc, 10*sc);
+  ctx.bezierCurveTo(30*sc, 0*sc, -30*sc, 0*sc, -45*sc, 10*sc);
+  ctx.fillStyle = dressColor;
+  ctx.fill();
+
+  // Dress overlay / fold detail
+  ctx.beginPath();
+  ctx.moveTo(-35*sc, 10*sc);
+  ctx.bezierCurveTo(-38*sc, 50*sc, -50*sc, 100*sc, -60*sc, 170*sc);
+  ctx.lineTo(60*sc, 170*sc);
+  ctx.bezierCurveTo(50*sc, 100*sc, 38*sc, 50*sc, 35*sc, 10*sc);
+  ctx.bezierCurveTo(20*sc, 5*sc, -20*sc, 5*sc, -35*sc, 10*sc);
+  ctx.fillStyle = dressDark;
+  ctx.fill();
+
+  // Collar / ribbon
+  ctx.fillStyle = mood === 'sleeping' ? '#e8d0f8' : '#f0abfc';
+  ctx.beginPath();
+  ctx.moveTo(-22*sc, 2*sc);
+  ctx.lineTo(0, 20*sc);
+  ctx.lineTo(22*sc, 2*sc);
+  ctx.lineTo(15*sc, -5*sc);
+  ctx.lineTo(0, 12*sc);
+  ctx.lineTo(-15*sc, -5*sc);
+  ctx.closePath(); ctx.fill();
+
+  // Dress bottom trim
+  ctx.beginPath();
+  ctx.moveTo(-75*sc, 155*sc);
+  for (let i = 0; i <= 10; i++) {
+    const x = -75*sc + i*15*sc;
+    const y = 155*sc + (i%2===0 ? 0 : -8*sc);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.lineTo(75*sc, 170*sc); ctx.lineTo(-75*sc, 170*sc);
+  ctx.fillStyle = mood === 'sleeping' ? '#b090cc' : '#a855f7';
+  ctx.fill();
+}
+
+// ── Arms ──────────────────────────────────────────────────────────────────────
+function drawArms(ctx, sc, mood, t) {
+  const skinColor = '#fde8d8';
+  const sleeveColor = mood === 'sick' ? '#b0c8b0' : mood === 'sleeping' ? '#c4b0d8' : '#c084fc';
+
+  // Right arm (character's right = viewer's left)
+  const rSwing = mood === 'happy' ? Math.sin(t*4+1)*15 : mood === 'waving' ? Math.sin(t*5)*30 : 5;
+  ctx.save();
+  ctx.translate(-55*sc, 15*sc);
+  ctx.rotate((-25 + rSwing) * Math.PI/180);
+  // Sleeve
+  ctx.fillStyle = sleeveColor;
+  ctx.beginPath(); ctx.roundRect(-10*sc, 0, 20*sc, 50*sc, 8*sc); ctx.fill();
+  // Hand
+  ctx.fillStyle = skinColor;
+  ctx.beginPath(); ctx.ellipse(0, 55*sc, 11*sc, 13*sc, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Left arm
+  const lSwing = mood === 'happy' ? Math.sin(t*4)*15 : -5;
+  ctx.save();
+  ctx.translate(55*sc, 15*sc);
+  ctx.rotate((25 + lSwing) * Math.PI/180);
+  ctx.fillStyle = sleeveColor;
+  ctx.beginPath(); ctx.roundRect(-10*sc, 0, 20*sc, 50*sc, 8*sc); ctx.fill();
+  ctx.fillStyle = skinColor;
+  ctx.beginPath(); ctx.ellipse(0, 55*sc, 11*sc, 13*sc, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// ── Head ──────────────────────────────────────────────────────────────────────
+function drawHead(ctx, sc, mood, breath) {
+  // Hair back layer
+  drawHairBack(ctx, sc, mood);
+
+  // Face
+  const skinColor = mood === 'sick' ? '#e8d8c4' : '#fde8d8';
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.ellipse(0, -80*sc, 62*sc, 72*sc, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Jaw/chin refinement (slightly pointy)
+  ctx.beginPath();
+  ctx.moveTo(-40*sc, -55*sc);
+  ctx.bezierCurveTo(-42*sc, -20*sc, -15*sc, 0, 0, 2*sc);
+  ctx.bezierCurveTo(15*sc, 0, 42*sc, -20*sc, 40*sc, -55*sc);
+  ctx.fillStyle = skinColor;
+  ctx.fill();
+
+  // Ears
+  ctx.fillStyle = '#f8d4c0';
+  ctx.beginPath(); ctx.ellipse(-62*sc, -80*sc, 12*sc, 16*sc, -0.2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 62*sc, -80*sc, 12*sc, 16*sc,  0.2, 0, Math.PI*2); ctx.fill();
+  // Inner ear
+  ctx.fillStyle = '#f0b8a8';
+  ctx.beginPath(); ctx.ellipse(-62*sc, -80*sc, 7*sc, 10*sc, -0.2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 62*sc, -80*sc, 7*sc, 10*sc,  0.2, 0, Math.PI*2); ctx.fill();
+
+  // Eyes
+  drawEyes(ctx, sc, mood);
+
+  // Eyebrows
+  drawEyebrows(ctx, sc, mood);
+
+  // Nose
+  ctx.strokeStyle = 'rgba(200,120,100,.5)';
+  ctx.lineWidth = 1.5*sc;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-4*sc, -62*sc); ctx.lineTo(0, -58*sc); ctx.lineTo(4*sc, -62*sc); ctx.stroke();
+
+  // Mouth
+  drawMouth(ctx, sc, mood);
+
+  // Blush cheeks
+  const blushAlpha = mood === 'happy' || mood === 'surprised' || mood === 'eating' ? .55 : .25;
+  const blushColor = `rgba(255,150,150,${blushAlpha})`;
+  ctx.fillStyle = blushColor;
+  ctx.beginPath(); ctx.ellipse(-42*sc, -62*sc, 18*sc, 10*sc, 0.1, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 42*sc, -62*sc, 18*sc, 10*sc,-0.1, 0, Math.PI*2); ctx.fill();
+
+  // Hair front layer (overlays face)
+  drawHairFront(ctx, sc, mood);
+
+  // Sleeping ZZZ
+  if (mood === 'sleeping') {
+    const zx = 70*sc, zy = -130*sc;
+    ctx.fillStyle = 'rgba(200,180,255,.8)';
+    ctx.font = `bold ${18*sc}px system-ui`;
+    ctx.fillText('z', zx + Math.sin(animT*.8)*3, zy + Math.sin(animT*.5)*5);
+    ctx.font = `bold ${13*sc}px system-ui`;
+    ctx.fillText('z', zx+18*sc + Math.sin(animT*.8+1)*3, zy-16*sc + Math.sin(animT*.5+1)*5);
+    ctx.font = `bold ${9*sc}px system-ui`;
+    ctx.fillText('z', zx+28*sc + Math.sin(animT*.8+2)*3, zy-28*sc + Math.sin(animT*.5+2)*5);
+  }
+}
+
+// ── Hair back ─────────────────────────────────────────────────────────────────
+function drawHairBack(ctx, sc, mood) {
+  const hc  = mood === 'sick' ? '#a8a0b8' : '#c084fc';
+  const hc2 = mood === 'sick' ? '#8880a0' : '#9333ea';
+
+  // Long back hair
+  ctx.fillStyle = hc2;
+  ctx.beginPath();
+  ctx.moveTo(-55*sc, -135*sc);
+  ctx.bezierCurveTo(-80*sc, -100*sc, -90*sc, -20*sc, -85*sc, 80*sc);
+  ctx.bezierCurveTo(-82*sc, 120*sc, -70*sc, 150*sc, -60*sc, 170*sc);
+  ctx.lineTo(-40*sc, 160*sc);
+  ctx.bezierCurveTo(-50*sc, 130*sc, -60*sc, 90*sc, -62*sc, 30*sc);
+  ctx.bezierCurveTo(-65*sc, -30*sc, -50*sc, -100*sc, -35*sc, -140*sc);
+  ctx.closePath(); ctx.fill();
+
+  ctx.fillStyle = hc2;
+  ctx.beginPath();
+  ctx.moveTo(55*sc, -135*sc);
+  ctx.bezierCurveTo(80*sc, -100*sc, 90*sc, -20*sc, 85*sc, 80*sc);
+  ctx.bezierCurveTo(82*sc, 120*sc, 70*sc, 150*sc, 60*sc, 170*sc);
+  ctx.lineTo(40*sc, 160*sc);
+  ctx.bezierCurveTo(50*sc, 130*sc, 60*sc, 90*sc, 62*sc, 30*sc);
+  ctx.bezierCurveTo(65*sc, -30*sc, 50*sc, -100*sc, 35*sc, -140*sc);
+  ctx.closePath(); ctx.fill();
+
+  // Hair center back
+  ctx.fillStyle = hc;
+  ctx.beginPath();
+  ctx.moveTo(-30*sc, -148*sc);
+  ctx.bezierCurveTo(-40*sc, -120*sc, -45*sc, -40*sc, -40*sc, 80*sc);
+  ctx.lineTo(40*sc, 80*sc);
+  ctx.bezierCurveTo(45*sc, -40*sc, 40*sc, -120*sc, 30*sc, -148*sc);
+  ctx.closePath(); ctx.fill();
+}
+
+// ── Hair front ────────────────────────────────────────────────────────────────
+function drawHairFront(ctx, sc, mood) {
+  const hc  = mood === 'sick' ? '#b8b0c8' : '#d946ef';
+  const hc2 = mood === 'sick' ? '#9090b0' : '#c084fc';
+  const hairWave = Math.sin(animT * .8) * 2 * sc;
+
+  // Top / crown
+  ctx.fillStyle = hc2;
+  ctx.beginPath();
+  ctx.moveTo(-62*sc, -115*sc);
+  ctx.bezierCurveTo(-70*sc, -145*sc, -40*sc, -160*sc,  0, -158*sc);
+  ctx.bezierCurveTo(40*sc, -160*sc, 70*sc, -145*sc, 62*sc, -115*sc);
+  ctx.bezierCurveTo(50*sc, -130*sc, 25*sc, -138*sc,   0, -138*sc);
+  ctx.bezierCurveTo(-25*sc, -138*sc, -50*sc,-130*sc, -62*sc,-115*sc);
+  ctx.fill();
+
+  // Center bang
+  ctx.fillStyle = hc;
+  ctx.beginPath();
+  ctx.moveTo(-22*sc, -138*sc);
+  ctx.bezierCurveTo(-30*sc, -120*sc, -28*sc, -100*sc, -20*sc+hairWave, -90*sc);
+  ctx.bezierCurveTo(-10*sc, -82*sc, 10*sc, -82*sc, 20*sc-hairWave, -90*sc);
+  ctx.bezierCurveTo(28*sc, -100*sc, 30*sc, -120*sc, 22*sc, -138*sc);
+  ctx.closePath(); ctx.fill();
+
+  // Left bang
+  ctx.fillStyle = hc2;
+  ctx.beginPath();
+  ctx.moveTo(-62*sc, -118*sc);
+  ctx.bezierCurveTo(-72*sc, -100*sc, -78*sc, -75*sc, -68*sc+hairWave, -55*sc);
+  ctx.bezierCurveTo(-60*sc, -42*sc, -50*sc, -44*sc, -44*sc, -55*sc);
+  ctx.bezierCurveTo(-40*sc, -80*sc, -38*sc, -105*sc, -42*sc, -130*sc);
+  ctx.closePath(); ctx.fill();
+
+  // Right bang
+  ctx.beginPath();
+  ctx.moveTo(62*sc, -118*sc);
+  ctx.bezierCurveTo(72*sc, -100*sc, 78*sc, -75*sc, 68*sc-hairWave, -55*sc);
+  ctx.bezierCurveTo(60*sc, -42*sc, 50*sc, -44*sc, 44*sc, -55*sc);
+  ctx.bezierCurveTo(40*sc, -80*sc, 38*sc, -105*sc, 42*sc, -130*sc);
+  ctx.closePath(); ctx.fill();
+
+  // Hair shine
+  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.beginPath();
+  ctx.ellipse(-8*sc, -135*sc, 14*sc, 7*sc, -0.4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.1)';
+  ctx.beginPath();
+  ctx.ellipse(20*sc, -128*sc, 8*sc, 4*sc, -0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Small bow / accessory
+  if (mood !== 'sick' && mood !== 'dead') {
+    ctx.fillStyle = '#f0abfc';
+    const bx = 38*sc, by = -138*sc;
+    ctx.beginPath(); ctx.moveTo(bx,by); ctx.bezierCurveTo(bx+16*sc,by-10*sc, bx+18*sc,by+10*sc,bx,by); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx,by); ctx.bezierCurveTo(bx-16*sc,by-10*sc, bx-18*sc,by+10*sc,bx,by); ctx.fill();
+    ctx.fillStyle = '#e879f9';
+    ctx.beginPath(); ctx.arc(bx, by, 5*sc, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+// ── Eyes ──────────────────────────────────────────────────────────────────────
+function drawEyes(ctx, sc, mood) {
+  const eyeY  = -82*sc;
+  const lEyeX = -24*sc, rEyeX = 24*sc;
+
+  const blinkH = blinking ? Math.sin(blinkProgress * Math.PI) : 0;
+  const eyeH   = (1 - blinkH * .95);
+
+  if (mood === 'sleeping') {
+    // Closed eyes – curved lines
+    ctx.strokeStyle = '#5a3080'; ctx.lineWidth = 3*sc; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lEyeX-16*sc, eyeY); ctx.quadraticCurveTo(lEyeX, eyeY-8*sc, lEyeX+16*sc, eyeY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(rEyeX-16*sc, eyeY); ctx.quadraticCurveTo(rEyeX, eyeY-8*sc, rEyeX+16*sc, eyeY); ctx.stroke();
+    return;
+  }
+
+  if (mood === 'dead') {
+    // X eyes
+    const drawX = (ex) => {
+      ctx.strokeStyle = '#888'; ctx.lineWidth = 3*sc; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ex-12*sc, eyeY-10*sc); ctx.lineTo(ex+12*sc, eyeY+10*sc); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ex+12*sc, eyeY-10*sc); ctx.lineTo(ex-12*sc, eyeY+10*sc); ctx.stroke();
+    };
+    drawX(lEyeX); drawX(rEyeX); return;
+  }
+
+  const drawEye = (ex) => {
+    const ew = 20*sc, eh = 22*sc * eyeH;
+    if (eh < 1) return;
+
+    ctx.save(); ctx.beginPath();
+    ctx.ellipse(ex, eyeY, ew, eh, 0, 0, Math.PI*2);
+    ctx.clip();
+
+    // White
+    ctx.fillStyle = 'white'; ctx.fillRect(ex-ew, eyeY-eh, ew*2, eh*2);
+
+    // Iris gradient
+    const irisColor = mood === 'sick' ? '#80a060' : '#7c3aed';
+    const irisLight = mood === 'sick' ? '#a0c880' : '#a855f7';
+    const ig = ctx.createRadialGradient(ex-4*sc, eyeY-5*sc, 1, ex, eyeY, 16*sc);
+    ig.addColorStop(0, irisLight); ig.addColorStop(1, irisColor);
+    ctx.fillStyle = ig;
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, 16*sc, 17*sc*eyeH, 0, 0, Math.PI*2); ctx.fill();
+
+    // Pupil
+    ctx.fillStyle = '#1a0030';
+    ctx.beginPath(); ctx.ellipse(ex+1*sc, eyeY+2*sc, 9*sc, 10*sc*eyeH, 0, 0, Math.PI*2); ctx.fill();
+
+    // Shine highlights
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    ctx.beginPath(); ctx.ellipse(ex-6*sc, eyeY-6*sc, 5*sc, 4*sc, -0.3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath(); ctx.ellipse(ex+5*sc, eyeY-2*sc, 3*sc, 2.5*sc, 0.2, 0, Math.PI*2); ctx.fill();
+
+    ctx.restore();
+
+    // Outline
+    ctx.strokeStyle = '#3d1a6e'; ctx.lineWidth = 2*sc;
+    ctx.beginPath(); ctx.ellipse(ex, eyeY, ew, eh, 0, 0, Math.PI*2); ctx.stroke();
+
+    // Upper lashes
+    ctx.strokeStyle = '#2d0f50'; ctx.lineWidth = 2.5*sc;
+    for (let i=0; i<5; i++) {
+      const a = Math.PI + (i/4)*Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(ex + Math.cos(a)*ew, eyeY + Math.sin(a)*eh);
+      ctx.lineTo(ex + Math.cos(a)*(ew+4*sc), eyeY + Math.sin(a)*(eh+6*sc) - 2*sc);
+      ctx.stroke();
+    }
+
+    // Happy sparkle in eye
+    if (mood === 'happy' || mood === 'surprised') {
+      ctx.fillStyle = `rgba(255,220,255,${.4+Math.sin(animT*3)*.2})`;
+      ctx.beginPath(); ctx.arc(ex+8*sc, eyeY+8*sc, 3*sc, 0, Math.PI*2); ctx.fill();
+    }
+  };
+
+  drawEye(lEyeX); drawEye(rEyeX);
+}
+
+// ── Eyebrows ──────────────────────────────────────────────────────────────────
+function drawEyebrows(ctx, sc, mood) {
+  const browY = -104*sc;
+  ctx.strokeStyle = '#5a3080'; ctx.lineWidth = 3*sc; ctx.lineCap = 'round';
+
+  const curves = {
+    idle:      [[-42*sc, browY],      [-24*sc, browY-6*sc],  [-6*sc,  browY-2*sc]],
+    happy:     [[-42*sc, browY-4*sc], [-24*sc, browY-10*sc], [-6*sc,  browY-4*sc]],
+    sad:       [[-42*sc, browY+4*sc], [-24*sc, browY-4*sc],  [-6*sc,  browY+2*sc]],
+    eating:    [[-42*sc, browY-2*sc], [-24*sc, browY-8*sc],  [-6*sc,  browY-2*sc]],
+    sick:      [[-42*sc, browY+6*sc], [-24*sc, browY-2*sc],  [-6*sc,  browY+4*sc]],
+    surprised: [[-42*sc, browY-8*sc], [-24*sc, browY-14*sc], [-6*sc,  browY-8*sc]],
+    sleeping:  [[-42*sc, browY+2*sc], [-24*sc, browY-4*sc],  [-6*sc,  browY+2*sc]],
+    dead:      [[-42*sc, browY+8*sc], [-24*sc, browY],       [-6*sc,  browY+6*sc]],
+  };
+  const [p1,p2,p3] = curves[mood] || curves.idle;
+  const [p4,p5,p6] = [[-p3[0],p3[1]], [-p2[0],p2[1]], [-p1[0],p1[1]]];
+
+  ctx.beginPath(); ctx.moveTo(...p1); ctx.quadraticCurveTo(...p2, ...p3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(...p4); ctx.quadraticCurveTo(...p5, ...p6); ctx.stroke();
+}
+
+// ── Mouth ─────────────────────────────────────────────────────────────────────
+function drawMouth(ctx, sc, mood) {
+  const my = -56*sc;
+  ctx.strokeStyle = '#c0607a'; ctx.lineWidth = 2.5*sc; ctx.lineCap = 'round';
+  ctx.fillStyle = '#d4607a';
+
+  if (mood === 'happy' || mood === 'eating') {
+    // Big smile / open mouth
+    ctx.beginPath();
+    ctx.moveTo(-18*sc, my);
+    ctx.quadraticCurveTo(0, my + 18*sc, 18*sc, my);
+    ctx.stroke();
+    // Teeth / open
+    if (mood === 'eating') {
+      ctx.beginPath();
+      ctx.moveTo(-14*sc, my+2*sc);
+      ctx.quadraticCurveTo(0, my+16*sc, 14*sc, my+2*sc);
+      ctx.lineTo(10*sc, my+2*sc);
+      ctx.lineTo(10*sc, my+10*sc);
+      ctx.lineTo(-10*sc, my+10*sc);
+      ctx.lineTo(-10*sc, my+2*sc);
+      ctx.closePath();
+      ctx.fillStyle = '#f8e8e0'; ctx.fill();
+      ctx.strokeStyle = '#d4607a'; ctx.lineWidth = 1.5*sc; ctx.stroke();
+    }
+    // Smile dimples
+    ctx.fillStyle = 'rgba(220,100,120,.4)';
+    ctx.beginPath(); ctx.arc(-20*sc, my+2*sc, 3*sc, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 20*sc, my+2*sc, 3*sc, 0, Math.PI*2); ctx.fill();
+  } else if (mood === 'sad') {
+    ctx.beginPath();
+    ctx.moveTo(-16*sc, my+8*sc);
+    ctx.quadraticCurveTo(0, my-4*sc, 16*sc, my+8*sc);
+    ctx.stroke();
+    // Tear drops
+    const tearX = 46*sc, tearY = -70*sc;
+    const tearOff = Math.sin(animT*2)*5*sc;
+    ctx.fillStyle = 'rgba(100,150,255,.7)';
+    ctx.beginPath(); ctx.arc(tearX, tearY+tearOff, 4*sc, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-tearX, tearY+tearOff+3*sc, 4*sc, 0, Math.PI*2); ctx.fill();
+  } else if (mood === 'sick') {
+    ctx.beginPath();
+    ctx.moveTo(-14*sc, my+4*sc);
+    ctx.bezierCurveTo(-6*sc, my-2*sc, 6*sc, my+8*sc, 14*sc, my+2*sc);
+    ctx.stroke();
+  } else if (mood === 'surprised') {
+    ctx.beginPath();
+    ctx.ellipse(0, my+6*sc, 10*sc, 12*sc, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#c0607a'; ctx.fill(); ctx.stroke();
+  } else if (mood === 'sleeping' || mood === 'dead') {
+    ctx.beginPath();
+    ctx.moveTo(-12*sc, my+4*sc); ctx.lineTo(12*sc, my+4*sc); ctx.stroke();
+  } else {
+    // Idle – small smile
+    ctx.beginPath();
+    ctx.moveTo(-12*sc, my+2*sc);
+    ctx.quadraticCurveTo(0, my+10*sc, 12*sc, my+2*sc);
+    ctx.stroke();
+  }
+}
+
+// ── Particles ─────────────────────────────────────────────────────────────────
+function updateParticles() {
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    p.x  += p.vx; p.y  += p.vy;
+    p.vy += 0.05; // gravity
+    p.life -= p.decay;
+    p.rot += p.rotV;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.globalAlpha = p.life;
+    ctx.font = `${p.size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const emojis = { hearts:'💜', food:'🍙', sparkle:'✨' };
+    ctx.fillText(emojis[p.type] || '✨', 0, 0);
+    ctx.restore();
+  });
+}
+
+// ── Start ──────────────────────────────────────────────────────────────────────
+updateHUD(); updateMoodLabel(); updateButtons();
+// Initial greeting particles
+setTimeout(() => spawnParticles('sparkle'), 500);
+requestAnimationFrame(draw);
+
+})();
+</script>
+</body>
+</html>

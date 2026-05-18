@@ -17,221 +17,184 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
 
+    /* Visitenkarte – Querformat */
     .card {
       background: #1a1a1a;
       border: 1px solid #2c2c2c;
-      border-radius: 14px;
+      border-radius: 16px;
       width: 100%;
-      max-width: 420px;
-      overflow: hidden;
+      max-width: 520px;
+      aspect-ratio: 1.75 / 1;
+      padding: 32px 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
-    /* Header – wie App-Header */
-    .card-header {
-      background: #111;
-      border-bottom: 1px solid #2c2c2c;
-      padding: 18px 20px;
+    /* Obere Zeile: Logo links, Name rechts */
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    /* Logo */
+    .logo {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
     .logo-icon {
-      width: 38px;
-      height: 38px;
+      width: 34px;
+      height: 34px;
       flex-shrink: 0;
     }
 
     .logo-text {
       display: flex;
       flex-direction: column;
-      line-height: 1;
+      gap: 2px;
     }
 
-    .logo-title {
-      font-size: 13px;
+    .logo-name {
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: .12em;
-      color: #ffffff;
+      letter-spacing: .14em;
+      color: #f0f0f0;
       text-transform: uppercase;
+      line-height: 1.2;
     }
 
     .logo-build {
       font-size: 9px;
-      color: #666;
+      color: #555;
       letter-spacing: .1em;
       text-transform: uppercase;
-      margin-top: 3px;
     }
 
-    /* Body */
-    .card-body {
-      padding: 22px 20px 8px;
+    /* Name & Rolle */
+    .identity {
+      text-align: right;
     }
 
-    .section-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: .12em;
+    .person-name {
+      font-size: 19px;
+      font-weight: 700;
+      color: #f0f0f0;
+      letter-spacing: -.01em;
+      line-height: 1.1;
+    }
+
+    .person-role {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+      letter-spacing: .06em;
       text-transform: uppercase;
-      color: #888;
-      margin-bottom: 14px;
+    }
+
+    /* Trennlinie */
+    .divider {
+      border: none;
+      border-top: 1px solid #2c2c2c;
+    }
+
+    /* Kontaktzeilen */
+    .contact {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 8px;
     }
 
-    .section-label::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #e8501a;
-      display: inline-block;
-    }
-
-    /* Info-Zeilen – wie App-Cards */
-    .info-block {
-      background: #111;
-      border: 1px solid #2a2a2a;
-      border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-    }
-
-    .info-label {
-      font-size: 11px;
-      color: #888;
-      margin-bottom: 3px;
-      letter-spacing: .02em;
-    }
-
-    .info-value {
-      font-size: 15px;
-      font-weight: 600;
-      color: #f0f0f0;
-    }
-
-    .info-value a {
-      color: #f0f0f0;
-      text-decoration: none;
-    }
-
-    .info-value a:hover {
-      color: #e8501a;
-    }
-
-    /* 2-spaltig wie App */
-    .info-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .info-row .info-block {
-      margin-bottom: 0;
-    }
-
-    /* Footer-Button – wie App-Button */
-    .card-footer {
-      padding: 12px 20px 20px;
-    }
-
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 13px 16px;
-      border-radius: 10px;
-      background: #1e1e1e;
-      border: 1px solid #2c2c2c;
-      color: #f0f0f0;
-      font-size: 14px;
-      font-weight: 600;
-      text-align: center;
-      text-decoration: none;
-      letter-spacing: .02em;
-      cursor: pointer;
-      margin-bottom: 8px;
-    }
-
-    .btn:hover { background: #252525; }
-
-    .btn-accent {
-      background: #e8501a;
-      border-color: #e8501a;
-      color: #fff;
-    }
-
-    .btn-accent:hover { background: #d44616; }
-
-    /* Legal Links */
-    .legal-links {
+    .contact-item {
       display: flex;
-      justify-content: center;
-      gap: 18px;
-      padding: 10px 20px 16px;
-      border-top: 1px solid #222;
+      align-items: center;
+      gap: 10px;
     }
 
-    .legal-links a {
-      font-size: 11px;
-      color: #555;
+    .contact-item svg {
+      width: 13px;
+      height: 13px;
+      fill: #666;
+      flex-shrink: 0;
+    }
+
+    .contact-item a,
+    .contact-item span {
+      font-size: 12px;
+      color: #aaa;
       text-decoration: none;
-      letter-spacing: .04em;
+      letter-spacing: .01em;
     }
 
-    .legal-links a:hover { color: #888; }
+    .contact-item a:hover { color: #f0f0f0; }
+
+    /* Auf kleinen Screens: Hochformat-Fallback */
+    @media (max-width: 400px) {
+      .card {
+        aspect-ratio: auto;
+        min-height: 240px;
+        padding: 24px;
+      }
+      .person-name { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
 
-    <!-- Header wie App -->
-    <div class="card-header">
-      <!-- Flammen-Logo als SVG, nachgebaut nach App-Icon -->
-      <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 36C13 36 8 30.5 8 24.5c0-4 2-7 4.5-9.5C14 16 14 18 15 19c1-4 3-9 8-13 0 4 1.5 6 3.5 8 .5-2 .5-4 0-6 3 3 5.5 7.5 5.5 13 0 1-.1 2-.3 3 1.5-1.5 2.3-3.5 2.3-5.5 2 2.5 2.5 6 2.5 8C36 30.5 27 36 20 36z" fill="white"/>
-      </svg>
-      <div class="logo-text">
-        <span class="logo-title">Heat Curve Nexus</span>
-        <span class="logo-build">Build 1.1.0</span>
-      </div>
-    </div>
-
-    <!-- Inhalt -->
-    <div class="card-body">
-
-      <div class="section-label">Kontakt</div>
-
-      <div class="info-block">
-        <div class="info-label">Name</div>
-        <div class="info-value">Viktor Hartung</div>
-      </div>
-
-      <div class="info-block">
-        <div class="info-label">E-Mail</div>
-        <div class="info-value">
-          <a href="mailto:viktor.hartung@icloud.com">viktor.hartung@icloud.com</a>
+    <div class="top">
+      <!-- Logo links -->
+      <div class="logo">
+        <svg class="logo-icon" viewBox="0 0 40 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Flammen-Silhouette, angelehnt an App-Icon -->
+          <path d="
+            M20 42
+            C11 42 5 35.5 5 28.5
+            C5 23.5 7.5 19.5 11 16.5
+            C11 19 12 21 13.5 22
+            C14.5 17 17 11 22 6
+            C22 10.5 24 13 26 15
+            C26.8 12.5 26.5 10 25.5 7.5
+            C29 11 32 16.5 32 22.5
+            C32 23.8 31.8 25 31.5 26
+            C33.5 24 34.5 21.5 34.5 19
+            C37 22 38 26 38 29
+            C38 36 29 42 20 42Z
+          " fill="#f0f0f0"/>
+        </svg>
+        <div class="logo-text">
+          <span class="logo-name">Heat Curve<br>Nexus</span>
+          <span class="logo-build">Build 1.1.0</span>
         </div>
       </div>
 
-      <div class="info-block">
-        <div class="info-label">Adresse</div>
-        <div class="info-value">Liegnitzer Straße 29, 26127 Oldenburg</div>
+      <!-- Name rechts -->
+      <div class="identity">
+        <div class="person-name">Viktor Hartung</div>
+        <div class="person-role">App-Entwickler</div>
       </div>
-
     </div>
 
-    <!-- Buttons -->
-    <div class="card-footer">
-      <a class="btn btn-accent" href="mailto:viktor.hartung@icloud.com">Nachricht senden</a>
-      <a class="btn" href="support.html">Support</a>
-    </div>
+    <hr class="divider">
 
-    <!-- Legal -->
-    <div class="legal-links">
-      <a href="privacy.html">Datenschutzerklärung</a>
+    <!-- Kontakt unten links -->
+    <div class="contact">
+      <div class="contact-item">
+        <!-- Mail -->
+        <svg viewBox="0 0 20 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 0H2C.9 0 0 .9 0 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V2c0-1.1-.9-2-2-2zm0 4-8 5-8-5V2l8 5 8-5v2z"/>
+        </svg>
+        <a href="mailto:viktor.hartung@icloud.com">viktor.hartung@icloud.com</a>
+      </div>
+      <div class="contact-item">
+        <!-- Pin -->
+        <svg viewBox="0 0 14 20" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 0C3.1 0 0 3.1 0 7c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5C5.6 9.5 4.5 8.4 4.5 7S5.6 4.5 7 4.5 9.5 5.6 9.5 7 8.4 9.5 7 9.5z"/>
+        </svg>
+        <span>Liegnitzer Str. 29, 26127 Oldenburg</span>
+      </div>
     </div>
 
   </div>

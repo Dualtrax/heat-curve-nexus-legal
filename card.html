@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Viktor Hartung – Visitenkarte</title>
+  <title>Viktor Hartung – HEAT CURVE NEXUS</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: #111;
+      background: #0c0c0c;
       min-height: 100dvh;
       display: flex;
       align-items: center;
@@ -19,189 +19,221 @@
 
     .card {
       background: #1a1a1a;
-      border: 1px solid #2e2e2e;
-      border-radius: 16px;
+      border: 1px solid #2c2c2c;
+      border-radius: 14px;
       width: 100%;
-      max-width: 440px;
-      aspect-ratio: 1.75 / 1;
-      padding: 32px 36px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      position: relative;
+      max-width: 420px;
       overflow: hidden;
-      box-shadow: 0 8px 40px rgba(0,0,0,.6);
     }
 
-    /* subtiler Hintergrund-Kreis */
-    .card::before {
-      content: '';
-      position: absolute;
-      right: -60px;
-      top: -60px;
-      width: 240px;
-      height: 240px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(232,80,26,.18) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-
-    .name {
-      font-size: 22px;
-      font-weight: 700;
-      color: #f5f5f5;
-      letter-spacing: -.02em;
-      line-height: 1.1;
-    }
-
-    .role {
-      font-size: 12px;
-      color: #888;
-      margin-top: 5px;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      font-weight: 500;
-    }
-
-    .brand {
-      text-align: right;
-    }
-
-    .brand-name {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: #e8501a;
-      line-height: 1.2;
-    }
-
-    .brand-sub {
-      font-size: 10px;
-      color: #555;
-      margin-top: 3px;
-      letter-spacing: .05em;
-    }
-
-    .bottom {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-    }
-
-    .contact {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .contact-item {
+    /* Header – wie App-Header */
+    .card-header {
+      background: #111;
+      border-bottom: 1px solid #2c2c2c;
+      padding: 18px 20px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: #aaa;
+      gap: 12px;
     }
 
-    .contact-item svg {
-      width: 13px;
-      height: 13px;
-      fill: #e8501a;
+    .logo-icon {
+      width: 38px;
+      height: 38px;
       flex-shrink: 0;
     }
 
-    .contact-item a {
-      color: #aaa;
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1;
+    }
+
+    .logo-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .logo-build {
+      font-size: 9px;
+      color: #666;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-top: 3px;
+    }
+
+    /* Body */
+    .card-body {
+      padding: 22px 20px 8px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #e8501a;
+      display: inline-block;
+    }
+
+    /* Info-Zeilen – wie App-Cards */
+    .info-block {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 3px;
+      letter-spacing: .02em;
+    }
+
+    .info-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+
+    .info-value a {
+      color: #f0f0f0;
       text-decoration: none;
     }
 
-    .contact-item a:hover {
-      color: #f5f5f5;
+    .info-value a:hover {
+      color: #e8501a;
     }
 
-    .divider-line {
-      width: 32px;
-      height: 2px;
+    /* 2-spaltig wie App */
+    .info-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .info-row .info-block {
+      margin-bottom: 0;
+    }
+
+    /* Footer-Button – wie App-Button */
+    .card-footer {
+      padding: 12px 20px 20px;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 10px;
+      background: #1e1e1e;
+      border: 1px solid #2c2c2c;
+      color: #f0f0f0;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      letter-spacing: .02em;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .btn:hover { background: #252525; }
+
+    .btn-accent {
       background: #e8501a;
-      border-radius: 2px;
-      align-self: flex-end;
-      margin-bottom: 4px;
+      border-color: #e8501a;
+      color: #fff;
     }
 
-    .links {
-      text-align: right;
+    .btn-accent:hover { background: #d44616; }
+
+    /* Legal Links */
+    .legal-links {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      justify-content: center;
+      gap: 18px;
+      padding: 10px 20px 16px;
+      border-top: 1px solid #222;
     }
 
-    .links a {
-      font-size: 10px;
+    .legal-links a {
+      font-size: 11px;
       color: #555;
       text-decoration: none;
       letter-spacing: .04em;
     }
 
-    .links a:hover {
-      color: #888;
-    }
-
-    /* Mobile: etwas kompakter */
-    @media (max-width: 480px) {
-      .card {
-        aspect-ratio: auto;
-        min-height: 220px;
-        padding: 24px;
-      }
-      .name { font-size: 18px; }
-    }
+    .legal-links a:hover { color: #888; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="top">
-      <div>
-        <div class="name">Viktor Hartung</div>
-        <div class="role">App-Entwickler</div>
-      </div>
-      <div class="brand">
-        <div class="brand-name">Heat Curve<br>Nexus</div>
-        <div class="brand-sub">iOS App</div>
+
+    <!-- Header wie App -->
+    <div class="card-header">
+      <!-- Flammen-Logo als SVG, nachgebaut nach App-Icon -->
+      <svg class="logo-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 36C13 36 8 30.5 8 24.5c0-4 2-7 4.5-9.5C14 16 14 18 15 19c1-4 3-9 8-13 0 4 1.5 6 3.5 8 .5-2 .5-4 0-6 3 3 5.5 7.5 5.5 13 0 1-.1 2-.3 3 1.5-1.5 2.3-3.5 2.3-5.5 2 2.5 2.5 6 2.5 8C36 30.5 27 36 20 36z" fill="white"/>
+      </svg>
+      <div class="logo-text">
+        <span class="logo-title">Heat Curve Nexus</span>
+        <span class="logo-build">Build 1.1.0</span>
       </div>
     </div>
 
-    <div class="bottom">
-      <div class="contact">
-        <div class="contact-item">
-          <!-- Mail Icon -->
-          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5zm2 0 6 5 6-5H4zm0 2.4V15h12V7.4l-6 5-6-5z"/>
-          </svg>
+    <!-- Inhalt -->
+    <div class="card-body">
+
+      <div class="section-label">Kontakt</div>
+
+      <div class="info-block">
+        <div class="info-label">Name</div>
+        <div class="info-value">Viktor Hartung</div>
+      </div>
+
+      <div class="info-block">
+        <div class="info-label">E-Mail</div>
+        <div class="info-value">
           <a href="mailto:viktor.hartung@icloud.com">viktor.hartung@icloud.com</a>
         </div>
-        <div class="contact-item">
-          <!-- Location Icon -->
-          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 1a6 6 0 0 1 6 6c0 4-6 12-6 12S4 11 4 7a6 6 0 0 1 6-6zm0 2a4 4 0 0 0-4 4c0 2.6 4 8.1 4 8.1S14 9.6 14 7a4 4 0 0 0-4-4zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
-          </svg>
-          <span>Liegnitzer Str. 29, 26127 Oldenburg</span>
-        </div>
       </div>
 
-      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-        <div class="divider-line"></div>
-        <div class="links">
-          <a href="privacy.html">Datenschutz</a>
-          <a href="support.html">Support</a>
-        </div>
+      <div class="info-block">
+        <div class="info-label">Adresse</div>
+        <div class="info-value">Liegnitzer Straße 29, 26127 Oldenburg</div>
       </div>
+
     </div>
+
+    <!-- Buttons -->
+    <div class="card-footer">
+      <a class="btn btn-accent" href="mailto:viktor.hartung@icloud.com">Nachricht senden</a>
+      <a class="btn" href="support.html">Support</a>
+    </div>
+
+    <!-- Legal -->
+    <div class="legal-links">
+      <a href="privacy.html">Datenschutzerklärung</a>
+    </div>
+
   </div>
 </body>
 </html>

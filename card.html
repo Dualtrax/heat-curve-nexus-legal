@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Viktor Hartung – HEAT CURVE NEXUS</title>
+  <style>
+    :root {
+      --accent: #e8501a;
+      --bg: #f5f5f7;
+      --card-bg: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --border: rgba(0,0,0,.08);
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000;
+        --card-bg: #1c1c1e;
+        --text: #f5f5f7;
+        --muted: #98989d;
+        --border: rgba(255,255,255,.1);
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      box-shadow: 0 4px 32px rgba(0,0,0,.10);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: var(--accent);
+      padding: 32px 28px 24px;
+    }
+    .app-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.75);
+      margin-bottom: 8px;
+    }
+    .app-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+    .card-body {
+      padding: 28px;
+    }
+    .name {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+      margin-bottom: 4px;
+    }
+    .role {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+    .info-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .info-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .info-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: rgba(232,80,26,.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 17px;
+    }
+    .info-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 36px;
+    }
+    .info-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .info-value {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .info-value a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .info-value a:hover { text-decoration: underline; }
+    .card-footer {
+      padding: 0 28px 24px;
+    }
+    .cta {
+      display: block;
+      width: 100%;
+      padding: 13px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      letter-spacing: .01em;
+      transition: opacity .15s;
+    }
+    .cta:hover { opacity: .85; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <p class="app-label">App</p>
+      <p class="app-name">HEAT CURVE NEXUS</p>
+    </div>
+    <div class="card-body">
+      <p class="name">Viktor Hartung</p>
+      <p class="role">Entwickler &amp; Ansprechpartner</p>
+      <ul class="info-list">
+        <li class="info-item">
+          <div class="info-icon">✉️</div>
+          <div class="info-content">
+            <span class="info-label">E-Mail</span>
+            <span class="info-value">
+              <a href="mailto:viktor.hartung@icloud.com">viktor.hartung@icloud.com</a>
+            </span>
+          </div>
+        </li>
+        <li class="info-item">
+          <div class="info-icon">📍</div>
+          <div class="info-content">
+            <span class="info-label">Adresse</span>
+            <span class="info-value">Liegnitzer Straße 29<br>26127 Oldenburg</span>
+          </div>
+        </li>
+      </ul>
+      <hr class="divider">
+      <ul class="info-list">
+        <li class="info-item">
+          <div class="info-icon">🔒</div>
+          <div class="info-content">
+            <span class="info-label">Rechtliches</span>
+            <span class="info-value">
+              <a href="privacy.html">Datenschutzerklärung</a>
+              &nbsp;·&nbsp;
+              <a href="support.html">Support</a>
+            </span>
+          </div>
+        </li>
+      </ul>
+    </div>
+    <div class="card-footer">
+      <a class="cta" href="mailto:viktor.hartung@icloud.com">Nachricht senden</a>
+    </div>
+  </div>
+</body>
+</html>

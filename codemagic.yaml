@@ -14,7 +14,7 @@ workflows:
         script: |
           set -e
 
-          echo "Aktueller Repository-Inhalt:"
+          echo "Repository-Inhalt:"
           ls -la
 
           ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
@@ -32,7 +32,7 @@ workflows:
           unzip -q "$ZIP_FILE" -d extracted
 
           echo "Entpackter Inhalt:"
-          find extracted -maxdepth 3 -type f | head -n 100
+          find extracted -maxdepth 4 -type f | head -n 200
 
           PROJECT_DIR=$(find extracted -name "package.json" -exec dirname {} \; | head -n 1)
 
@@ -41,39 +41,34 @@ workflows:
             exit 1
           fi
 
-          echo "Projektordner: $PROJECT_DIR"
+          echo "Projektordner gefunden: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$CM_ENV"
 
-      - name: Install npm dependencies
+      - name: Install npm dependencies and Capacitor
         script: |
           set -e
 
           cd "$PROJECT_DIR"
 
-          echo "Node Version:"
+          echo "Node:"
           node -v
 
-          echo "NPM Version:"
+          echo "NPM:"
           npm -v
 
-          echo "Installiere npm-Abhängigkeiten..."
           npm install
 
-          echo "Installiere Capacitor CLI/Core/iOS sicherheitshalber..."
           npm install @capacitor/core @capacitor/cli @capacitor/ios --save-dev
 
-          echo "Prüfe Capacitor:"
           npx cap --version
 
-      - name: Ensure Capacitor config exists
+      - name: Ensure Capacitor config
         script: |
           set -e
 
           cd "$PROJECT_DIR"
 
           if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            echo "capacitor.config fehlt. Erstelle capacitor.config.json..."
-
             cat > capacitor.config.json <<'EOF'
           {
             "appId": "de.hartung.heatcurvenexus",
@@ -87,15 +82,13 @@ workflows:
           echo "Capacitor Config:"
           cat capacitor.config.json || true
 
-      - name: Ensure www folder exists
+      - name: Ensure www folder
         script: |
           set -e
 
           cd "$PROJECT_DIR"
 
           if [ ! -d "www" ]; then
-            echo "www-Ordner fehlt. Suche index.html..."
-
             INDEX_DIR=$(find . -name "index.html" -exec dirname {} \; | head -n 1)
 
             if [ -z "$INDEX_DIR" ]; then
@@ -104,7 +97,6 @@ workflows:
             fi
 
             echo "index.html gefunden in: $INDEX_DIR"
-            echo "Erstelle www-Ordner..."
 
             mkdir -p www
 
@@ -115,7 +107,7 @@ workflows:
           echo "www-Inhalt:"
           ls -la www | head -n 50
 
-      - name: Create Capacitor iOS project
+      - name: Create or repair Capacitor iOS project
         script: |
           set -e
 
@@ -126,20 +118,14 @@ workflows:
           echo "Erstelle iOS-Projekt..."
           npx cap add ios
 
-          echo "iOS-Projekt erstellt:"
-          ls -la ios
-          ls -la ios/App
-
-      - name: Sync Capacitor iOS
-        script: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          echo "Synchronisiere Capacitor..."
+          echo "Sync iOS..."
           npx cap sync ios
 
-      - name: Install CocoaPods
+          echo "iOS-Struktur nach cap add/sync:"
+          find ios -maxdepth 4 -type d | sort
+          find ios -maxdepth 4 -type f | sort | head -n 200
+
+      - name: Install CocoaPods if available
         script: |
           set -e
 
@@ -148,9 +134,13 @@ workflows:
           if [ -f "ios/App/Podfile" ]; then
             cd ios/App
             pod install
+            cd ../..
           else
-            echo "Kein Podfile gefunden, überspringe CocoaPods."
+            echo "Kein Podfile gefunden."
           fi
+
+          echo "Suche Xcode-Dateien:"
+          find ios -maxdepth 5 \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) -print
 
       - name: Build unsigned iOS app
         script: |
@@ -158,16 +148,43 @@ workflows:
 
           cd "$PROJECT_DIR"
 
-          xcodebuild \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/ios \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
+          WORKSPACE_PATH=$(find ios -name "App.xcworkspace" | head -n 1)
+          PROJECT_PATH=$(find ios -name "App.xcodeproj" | head -n 1)
+
+          if [ -n "$WORKSPACE_PATH" ]; then
+            echo "Baue mit Workspace: $WORKSPACE_PATH"
+
+            xcodebuild \
+              -workspace "$WORKSPACE_PATH" \
+              -scheme App \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              build
+
+          elif [ -n "$PROJECT_PATH" ]; then
+            echo "Baue mit Project: $PROJECT_PATH"
+
+            xcodebuild \
+              -project "$PROJECT_PATH" \
+              -scheme App \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              build
+
+          else
+            echo "FEHLER: Keine App.xcworkspace oder App.xcodeproj gefunden."
+            echo "iOS-Inhalt:"
+            find ios -maxdepth 6 -type f | sort
+            exit 1
+          fi
 
       - name: Package unsigned IPA for KSign
         script: |
@@ -175,14 +192,16 @@ workflows:
 
           cd "$PROJECT_DIR"
 
-          APP_PATH="build/ios/Build/Products/Release-iphoneos/App.app"
+          APP_PATH=$(find build/ios/Build/Products/Release-iphoneos -maxdepth 2 -type d -name "*.app" | head -n 1)
 
-          if [ ! -d "$APP_PATH" ]; then
-            echo "FEHLER: App.app nicht gefunden."
-            echo "Gefundene .app-Dateien:"
-            find build/ios/Build/Products -maxdepth 5 -type d -name "*.app" || true
+          if [ -z "$APP_PATH" ]; then
+            echo "FEHLER: Keine .app gefunden."
+            echo "Build-Inhalt:"
+            find build/ios/Build/Products -maxdepth 6 -type d || true
             exit 1
           fi
+
+          echo "Gefundene App: $APP_PATH"
 
           rm -rf Payload artifacts
           mkdir -p Payload artifacts

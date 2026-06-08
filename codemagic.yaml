@@ -1,92 +1,200 @@
 workflows:
-  ios-capacitor-unsigned-check:
-    name: iOS Capacitor unsigned build check
+  ios_unsigned_ipa_for_ksign_from_zip:
+    name: iOS unsigned IPA for KSign from ZIP
     max_build_duration: 60
     instance_type: mac_mini_m2
 
     environment:
-      node: 22
+      node: latest
       xcode: latest
+      cocoapods: default
 
     scripts:
-      - name: Check tool versions
-        script: |
-          node -v
-          npm -v
-          xcodebuild -version
-
       - name: Clean workspace and unzip project
         script: |
-          rm -rf www ios node_modules package.json package-lock.json capacitor.config.json
-          unzip -o pv-protokoll_V0.6.119-codemagic-capacitor.zip
+          set -e
+
+          echo "Aktueller Repository-Inhalt:"
           ls -la
+
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "FEHLER: Keine ZIP-Datei im Hauptordner gefunden."
+            exit 1
+          fi
+
+          echo "Gefundene ZIP-Datei: $ZIP_FILE"
+
+          rm -rf extracted
+          mkdir -p extracted
+
+          unzip -q "$ZIP_FILE" -d extracted
+
+          echo "Entpackter Inhalt:"
+          find extracted -maxdepth 3 -type f | head -n 100
+
+          PROJECT_DIR=$(find extracted -name "package.json" -exec dirname {} \; | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "FEHLER: Keine package.json in der ZIP gefunden."
+            exit 1
+          fi
+
+          echo "Projektordner: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$CM_ENV"
 
       - name: Install npm dependencies
         script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Node Version:"
+          node -v
+
+          echo "NPM Version:"
+          npm -v
+
+          echo "Installiere npm-Abhängigkeiten..."
           npm install
+
+          echo "Installiere Capacitor CLI/Core/iOS sicherheitshalber..."
+          npm install @capacitor/core @capacitor/cli @capacitor/ios --save-dev
+
+          echo "Prüfe Capacitor:"
+          npx cap --version
+
+      - name: Ensure Capacitor config exists
+        script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            echo "capacitor.config fehlt. Erstelle capacitor.config.json..."
+
+            cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "de.hartung.heatcurvenexus",
+            "appName": "Heat Curve Nexus",
+            "webDir": "www",
+            "bundledWebRuntime": false
+          }
+          EOF
+          fi
+
+          echo "Capacitor Config:"
+          cat capacitor.config.json || true
+
+      - name: Ensure www folder exists
+        script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ ! -d "www" ]; then
+            echo "www-Ordner fehlt. Suche index.html..."
+
+            INDEX_DIR=$(find . -name "index.html" -exec dirname {} \; | head -n 1)
+
+            if [ -z "$INDEX_DIR" ]; then
+              echo "FEHLER: Keine index.html gefunden."
+              exit 1
+            fi
+
+            echo "index.html gefunden in: $INDEX_DIR"
+            echo "Erstelle www-Ordner..."
+
+            mkdir -p www
+
+            shopt -s dotglob
+            cp -R "$INDEX_DIR"/* www/
+          fi
+
+          echo "www-Inhalt:"
+          ls -la www | head -n 50
 
       - name: Create Capacitor iOS project
         script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
           rm -rf ios
+
+          echo "Erstelle iOS-Projekt..."
           npx cap add ios
+
+          echo "iOS-Projekt erstellt:"
           ls -la ios
           ls -la ios/App
 
       - name: Sync Capacitor iOS
         script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Synchronisiere Capacitor..."
           npx cap sync ios
 
-      - name: Install CocoaPods if Podfile exists
+      - name: Install CocoaPods
         script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
           if [ -f "ios/App/Podfile" ]; then
             cd ios/App
             pod install
-          elif [ -f "ios/Podfile" ]; then
-            cd ios
-            pod install
           else
-            echo "No Podfile found. Skipping CocoaPods. Using SPM/Xcode project."
+            echo "Kein Podfile gefunden, überspringe CocoaPods."
           fi
 
-      - name: Build iOS app without signing
+      - name: Build unsigned iOS app
         script: |
-          if [ -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
-            xcodebuild \
-              -workspace ios/App/App.xcworkspace \
-              -scheme App \
-              -configuration Debug \
-              -sdk iphoneos \
-              -derivedDataPath build/ios \
-              CODE_SIGNING_ALLOWED=NO \
-              build
-          else
-            xcodebuild \
-              -project ios/App/App.xcodeproj \
-              -scheme App \
-              -configuration Debug \
-              -sdk iphoneos \
-              -derivedDataPath build/ios \
-              CODE_SIGNING_ALLOWED=NO \
-              build
-          fi
+          set -e
 
-      - name: Create unsigned IPA
+          cd "$PROJECT_DIR"
+
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA for KSign
         script: |
-          APP_PATH=$(find build/ios/Build/Products/Debug-iphoneos -name "*.app" -type d | head -n 1)
+          set -e
 
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found."
-            find build/ios -maxdepth 6 -type d
+          cd "$PROJECT_DIR"
+
+          APP_PATH="build/ios/Build/Products/Release-iphoneos/App.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "FEHLER: App.app nicht gefunden."
+            echo "Gefundene .app-Dateien:"
+            find build/ios/Build/Products -maxdepth 5 -type d -name "*.app" || true
             exit 1
           fi
 
-          echo "Found app: $APP_PATH"
+          rm -rf Payload artifacts
+          mkdir -p Payload artifacts
 
-          rm -rf Payload unsigned-ipa
-          mkdir -p Payload unsigned-ipa
-          cp -R "$APP_PATH" Payload/
-          zip -r unsigned-ipa/PV-App-unsigned.ipa Payload
+          cp -R "$APP_PATH" "Payload/HeatCurveNexus.app"
+
+          /usr/bin/zip -qry "artifacts/HeatCurveNexus-v1.1.0-unsigned-for-KSign.ipa" Payload
+
+          echo "IPA erstellt:"
+          ls -la artifacts
 
     artifacts:
-      - build/ios/Build/Products/Debug-iphoneos/*.app
-      - unsigned-ipa/*.ipa
+      - extracted/**/artifacts/*.ipa
+      - extracted/**/build/ios/Build/Products/Release-iphoneos/*.app
+      - /tmp/xcodebuild_logs/*.log

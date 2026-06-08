@@ -1,63 +1,92 @@
 workflows:
-  ios_unsigned_ipa_for_ksign:
-    name: iOS unsigned IPA for KSign
+  ios-capacitor-unsigned-check:
+    name: iOS Capacitor unsigned build check
     max_build_duration: 60
     instance_type: mac_mini_m2
 
     environment:
-      node: latest
+      node: 22
       xcode: latest
-      cocoapods: default
-
-    cache:
-      cache_paths:
-        - ~/.npm
-        - ~/Library/Caches/CocoaPods
 
     scripts:
+      - name: Check tool versions
+        script: |
+          node -v
+          npm -v
+          xcodebuild -version
+
+      - name: Clean workspace and unzip project
+        script: |
+          rm -rf www ios node_modules package.json package-lock.json capacitor.config.json
+          unzip -o pv-protokoll_V0.6.119-codemagic-capacitor.zip
+          ls -la
+
       - name: Install npm dependencies
         script: |
           npm install
 
-      - name: Create iOS Capacitor project if missing
+      - name: Create Capacitor iOS project
         script: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
+          rm -rf ios
+          npx cap add ios
+          ls -la ios
+          ls -la ios/App
 
-      - name: Sync web app to iOS
+      - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
 
-      - name: Build unsigned iOS app
+      - name: Install CocoaPods if Podfile exists
         script: |
-          set -e
-          xcodebuild \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/ios \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App
+            pod install
+          elif [ -f "ios/Podfile" ]; then
+            cd ios
+            pod install
+          else
+            echo "No Podfile found. Skipping CocoaPods. Using SPM/Xcode project."
+          fi
 
-      - name: Package unsigned IPA for KSign
+      - name: Build iOS app without signing
         script: |
-          set -e
-          APP_PATH="build/ios/Build/Products/Release-iphoneos/App.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "App.app not found at $APP_PATH"
-            find build/ios/Build/Products -maxdepth 4 -type d -name "*.app" || true
+          if [ -f "ios/App/App.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild \
+              -workspace ios/App/App.xcworkspace \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphoneos \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          else
+            xcodebuild \
+              -project ios/App/App.xcodeproj \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphoneos \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          fi
+
+      - name: Create unsigned IPA
+        script: |
+          APP_PATH=$(find build/ios/Build/Products/Debug-iphoneos -name "*.app" -type d | head -n 1)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found."
+            find build/ios -maxdepth 6 -type d
             exit 1
           fi
-          rm -rf Payload artifacts
-          mkdir -p Payload artifacts
-          cp -R "$APP_PATH" "Payload/HeatCurveNexus.app"
-          /usr/bin/zip -qry "artifacts/HeatCurveNexus-v1.1.0-unsigned-for-KSign.ipa" Payload
+
+          echo "Found app: $APP_PATH"
+
+          rm -rf Payload unsigned-ipa
+          mkdir -p Payload unsigned-ipa
+          cp -R "$APP_PATH" Payload/
+          zip -r unsigned-ipa/PV-App-unsigned.ipa Payload
 
     artifacts:
-      - artifacts/*.ipa
-      - build/ios/Build/Products/Release-iphoneos/*.app
-      - /tmp/xcodebuild_logs/*.log
+      - build/ios/Build/Products/Debug-iphoneos/*.app
+      - unsigned-ipa/*.ipa

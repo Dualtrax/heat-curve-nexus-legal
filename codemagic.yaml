@@ -28,16 +28,13 @@ workflows:
 
           rm -rf extracted
           mkdir -p extracted
-
           unzip -q "$ZIP_FILE" -d extracted
-
-          echo "Entpackter Inhalt:"
-          find extracted -maxdepth 4 -type f | head -n 200
 
           PROJECT_DIR=$(find extracted -name "package.json" -exec dirname {} \; | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "FEHLER: Keine package.json in der ZIP gefunden."
+            find extracted -maxdepth 5 -type f | head -n 200
             exit 1
           fi
 
@@ -50,37 +47,10 @@ workflows:
 
           cd "$PROJECT_DIR"
 
-          echo "Node:"
-          node -v
-
-          echo "NPM:"
-          npm -v
-
           npm install
-
           npm install @capacitor/core @capacitor/cli @capacitor/ios --save-dev
 
           npx cap --version
-
-      - name: Ensure Capacitor config
-        script: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            cat > capacitor.config.json <<'EOF'
-          {
-            "appId": "de.hartung.heatcurvenexus",
-            "appName": "Heat Curve Nexus",
-            "webDir": "www",
-            "bundledWebRuntime": false
-          }
-          EOF
-          fi
-
-          echo "Capacitor Config:"
-          cat capacitor.config.json || true
 
       - name: Ensure www folder
         script: |
@@ -96,10 +66,7 @@ workflows:
               exit 1
             fi
 
-            echo "index.html gefunden in: $INDEX_DIR"
-
             mkdir -p www
-
             shopt -s dotglob
             cp -R "$INDEX_DIR"/* www/
           fi
@@ -107,7 +74,7 @@ workflows:
           echo "www-Inhalt:"
           ls -la www | head -n 50
 
-      - name: Create or repair Capacitor iOS project
+      - name: Create and sync Capacitor iOS project
         script: |
           set -e
 
@@ -115,15 +82,21 @@ workflows:
 
           rm -rf ios
 
-          echo "Erstelle iOS-Projekt..."
           npx cap add ios
-
-          echo "Sync iOS..."
           npx cap sync ios
 
-          echo "iOS-Struktur nach cap add/sync:"
-          find ios -maxdepth 4 -type d | sort
-          find ios -maxdepth 4 -type f | sort | head -n 200
+      - name: Patch native iOS WebView scroll bounce
+        script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ -f "scripts/patch-ios-webview-scroll.sh" ]; then
+            bash scripts/patch-ios-webview-scroll.sh
+          else
+            echo "FEHLER: scripts/patch-ios-webview-scroll.sh fehlt."
+            exit 1
+          fi
 
       - name: Install CocoaPods if available
         script: |
@@ -134,13 +107,9 @@ workflows:
           if [ -f "ios/App/Podfile" ]; then
             cd ios/App
             pod install
-            cd ../..
           else
             echo "Kein Podfile gefunden."
           fi
-
-          echo "Suche Xcode-Dateien:"
-          find ios -maxdepth 5 \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) -print
 
       - name: Build unsigned iOS app
         script: |
@@ -181,7 +150,6 @@ workflows:
 
           else
             echo "FEHLER: Keine App.xcworkspace oder App.xcodeproj gefunden."
-            echo "iOS-Inhalt:"
             find ios -maxdepth 6 -type f | sort
             exit 1
           fi
@@ -196,7 +164,6 @@ workflows:
 
           if [ -z "$APP_PATH" ]; then
             echo "FEHLER: Keine .app gefunden."
-            echo "Build-Inhalt:"
             find build/ios/Build/Products -maxdepth 6 -type d || true
             exit 1
           fi

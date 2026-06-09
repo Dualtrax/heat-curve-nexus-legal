@@ -28,13 +28,18 @@ workflows:
 
           rm -rf extracted
           mkdir -p extracted
+
           unzip -q "$ZIP_FILE" -d extracted
+
+          echo "Entpackter Inhalt:"
+          find extracted -maxdepth 4 -type f | head -n 200
 
           PROJECT_DIR=$(find extracted -name "package.json" -exec dirname {} \; | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "FEHLER: Keine package.json in der ZIP gefunden."
-            find extracted -maxdepth 5 -type f | head -n 200
+            echo "Entpackter Inhalt:"
+            find extracted -maxdepth 6 -type f | head -n 300
             exit 1
           fi
 
@@ -47,18 +52,56 @@ workflows:
 
           cd "$PROJECT_DIR"
 
+          echo "Node Version:"
+          node -v
+
+          echo "NPM Version:"
+          npm -v
+
           npm install
+
           npm install @capacitor/core @capacitor/cli @capacitor/ios --save-dev
 
+          echo "Capacitor Version:"
           npx cap --version
 
-      - name: Ensure www folder
+      - name: Ensure Capacitor config exists
+        script: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            echo "capacitor.config fehlt. Erstelle capacitor.config.json..."
+
+            cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "de.hartung.heatcurvenexus",
+            "appName": "Heat Curve Nexus",
+            "webDir": "www",
+            "backgroundColor": "#111318",
+            "ios": {
+              "backgroundColor": "#111318",
+              "contentInset": "never",
+              "scrollEnabled": true,
+              "allowsLinkPreview": false
+            }
+          }
+          EOF
+          fi
+
+          echo "Capacitor Config:"
+          cat capacitor.config.json || true
+
+      - name: Ensure www folder exists
         script: |
           set -e
 
           cd "$PROJECT_DIR"
 
           if [ ! -d "www" ]; then
+            echo "www-Ordner fehlt. Suche index.html..."
+
             INDEX_DIR=$(find . -name "index.html" -exec dirname {} \; | head -n 1)
 
             if [ -z "$INDEX_DIR" ]; then
@@ -66,13 +109,16 @@ workflows:
               exit 1
             fi
 
+            echo "index.html gefunden in: $INDEX_DIR"
+
             mkdir -p www
+
             shopt -s dotglob
             cp -R "$INDEX_DIR"/* www/
           fi
 
           echo "www-Inhalt:"
-          ls -la www | head -n 50
+          ls -la www | head -n 80
 
       - name: Create and sync Capacitor iOS project
         script: |
@@ -82,8 +128,14 @@ workflows:
 
           rm -rf ios
 
+          echo "Erstelle iOS-Projekt..."
           npx cap add ios
+
+          echo "Synchronisiere iOS-Projekt..."
           npx cap sync ios
+
+          echo "iOS-Struktur:"
+          find ios -maxdepth 5 -type f | head -n 200
 
       - name: Patch native iOS WebView scroll bounce
         script: |
@@ -92,24 +144,32 @@ workflows:
           cd "$PROJECT_DIR"
 
           if [ -f "scripts/patch-ios-webview-scroll.sh" ]; then
+            echo "Führe nativen iOS Scroll/Bounce Patch aus..."
             bash scripts/patch-ios-webview-scroll.sh
           else
             echo "FEHLER: scripts/patch-ios-webview-scroll.sh fehlt."
+            echo "Vorhandene scripts-Dateien:"
+            find . -maxdepth 4 -type f -path "*scripts*" || true
             exit 1
           fi
 
-      - name: Install CocoaPods if available
+      - name: Install CocoaPods if Podfile exists
         script: |
           set -e
 
           cd "$PROJECT_DIR"
 
           if [ -f "ios/App/Podfile" ]; then
+            echo "Installiere CocoaPods..."
             cd ios/App
             pod install
+            cd ../..
           else
-            echo "Kein Podfile gefunden."
+            echo "Kein Podfile gefunden. CocoaPods wird übersprungen."
           fi
+
+          echo "Xcode-Dateien:"
+          find ios -maxdepth 6 \( -name "*.xcworkspace" -o -name "*.xcodeproj" \) -print
 
       - name: Build unsigned iOS app
         script: |
@@ -150,6 +210,7 @@ workflows:
 
           else
             echo "FEHLER: Keine App.xcworkspace oder App.xcodeproj gefunden."
+            echo "iOS-Inhalt:"
             find ios -maxdepth 6 -type f | sort
             exit 1
           fi
@@ -164,6 +225,7 @@ workflows:
 
           if [ -z "$APP_PATH" ]; then
             echo "FEHLER: Keine .app gefunden."
+            echo "Build-Inhalt:"
             find build/ios/Build/Products -maxdepth 6 -type d || true
             exit 1
           fi
